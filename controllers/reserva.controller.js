@@ -136,6 +136,186 @@ export const getReservasCalendar = async (req, res, next) => {
 };
 
 /**
+ * GET /api/calendario
+ * Query params:
+ *  - startDate=YYYY-MM-DD (opcional)
+ *  - endDate=YYYY-MM-DD   (opcional)
+ *  - habitacionesIds=101,102 (opcional)
+ *  - includedStatuses=confirmada,checkin (opcional; si viene, ignora excludedStatuses)
+ *  - excludedStatuses=cancelada,anulada  (opcional; default: ["cancelada","canceled","anulada","void"])
+ */
+export const getReservasCalendar2 = async (req, res, next) => {
+	try {
+		const toYMD = (d) => new Date(d).toISOString().slice(0, 10);
+		const today = new Date();
+		const defaultStart = toYMD(new Date(today.getFullYear(), today.getMonth(), 1));
+		const defaultEnd = toYMD(new Date(today.getFullYear(), today.getMonth() + 4, 0));
+
+		const startDate = (req.query.startDate && String(req.query.startDate)) || defaultStart;
+		const endDate = (req.query.endDate && String(req.query.endDate)) || defaultEnd;
+
+		// Parsear números de habitación desde query
+		const parseNums = (val) => {
+			if (!val) return [];
+			if (Array.isArray(val)) return val.flatMap(v => String(v).split(",")).map(Number).filter(Number.isFinite);
+			if (typeof val === "string") return val.split(",").map(Number).filter(Number.isFinite);
+			if (typeof val === "number" && Number.isFinite(val)) return [val];
+			return [];
+		};
+		const numeros = Array.from(new Set(parseNums(req?.query?.habitacionesNumeros)));
+		const usarFiltroHabit = numeros.length > 0;
+
+		const includedStatuses = req.query.includedStatuses
+			? String(req.query.includedStatuses).split(",").map(s => s.trim().toLowerCase()).filter(Boolean)
+			: null;
+
+		const excludedStatuses = !includedStatuses
+			? (req.query.excludedStatuses
+				? String(req.query.excludedStatuses).split(",").map(s => s.trim().toLowerCase()).filter(Boolean)
+				: ["cancelada", "canceled", "anulada", "void"])
+			: [];
+
+		// ========== ROOMS ==========
+		const roomsSql = `
+      SELECT
+        h."idHabitacion" AS "id",
+        h."numero" AS "numero",
+        ('Habitación ' || h."numero") AS "name"
+      FROM "Habitacion" h
+      ${usarFiltroHabit ? 'WHERE h."numero" IN (:numeros)' : ''}
+      ORDER BY h."numero";
+    `;
+		const rooms = await sequelize.query(roomsSql, {
+			type: QueryTypes.SELECT,
+			replacements: usarFiltroHabit ? { numeros } : {},
+		});
+
+		const totalSubset = rooms.length;
+		if (!totalSubset) {
+			return res.json({
+				range: { startDate, endDate, endExclusive: true },
+				roomCount: 0,
+				rooms: [],
+				bookings: [],
+				byDate: [],
+				fullyBookedDates: [],
+			});
+		}
+
+		// ========= WHERE compartidos =========
+		const habitWhere = usarFiltroHabit ? 'h."numero" IN (:numeros)' : null;
+
+		const estadoWhere = [];
+		const estadoRepl = {};
+		if (includedStatuses && includedStatuses.length) {
+			estadoWhere.push('LOWER(er."nombre") IN (:includedStatuses)');
+			estadoRepl.includedStatuses = includedStatuses;
+		} else if (excludedStatuses && excludedStatuses.length) {
+			estadoWhere.push('LOWER(er."nombre") NOT IN (:excludedStatuses)');
+			estadoRepl.excludedStatuses = excludedStatuses;
+		}
+
+		const baseOverlap = [
+			'r."fechaDesde" < (:endDate::date + INTERVAL \'1 day\')',
+			'r."fechaHasta" > :startDate::date',
+			...estadoWhere,
+		].filter(Boolean).join(' AND ');
+
+		// ========== BOOKINGS ==========
+		const bookingsSql = `
+      SELECT
+        r."idReserva" AS "id",
+        h."numero" AS "roomNumber",
+        to_char(date_trunc('day', r."fechaDesde"), 'YYYY-MM-DD') AS "start",
+        to_char(date_trunc('day', r."fechaHasta"), 'YYYY-MM-DD') AS "end",
+        COALESCE(hp."nombre", '') AS "guest",
+        r."montoTotal" AS "price",
+        LOWER(er."nombre") AS "status"
+      FROM "Reserva" r
+      JOIN "Habitacion" h ON h."idHabitacion" = r."idHabitacion"
+      JOIN "Huesped" hp ON hp."idHuesped" = r."idHuesped"
+      JOIN "EstadoReserva" er ON er."idEstadoReserva" = r."idEstadoReserva"
+      WHERE ${baseOverlap}
+      ${usarFiltroHabit ? 'AND h."numero" IN (:numeros)' : ''}
+      ORDER BY r."fechaDesde", r."idReserva";
+    `;
+		const bookings = await sequelize.query(bookingsSql, {
+			type: QueryTypes.SELECT,
+			replacements: {
+				startDate,
+				endDate,
+				...(usarFiltroHabit ? { numeros } : {}),
+				...estadoRepl,
+			},
+		});
+
+		// ========== BY-DATE ==========
+		const byDateSql = `
+      WITH days AS (
+        SELECT d::date AS day
+        FROM generate_series(:startDate::date, :endDate::date, '1 day') AS d
+      )
+      SELECT
+        to_char(days.day, 'YYYY-MM-DD') AS "date",
+        COUNT(DISTINCT h."numero") AS "roomsReserved",
+        ARRAY_AGG(DISTINCT h."numero") AS "roomNumbers"
+      FROM days
+      LEFT JOIN "Reserva" r
+        ON days.day BETWEEN date_trunc('day', r."fechaDesde")
+                         AND date_trunc('day', r."fechaHasta")
+       AND r."fechaDesde" < (:endDate::date + INTERVAL '1 day')
+       AND r."fechaHasta" > :startDate::date
+      JOIN "Habitacion" h ON h."idHabitacion" = r."idHabitacion"
+      LEFT JOIN "EstadoReserva" er ON er."idEstadoReserva" = r."idEstadoReserva"
+      ${usarFiltroHabit ? 'AND h."numero" IN (:numeros)' : ""}
+      ${estadoWhere.length ? `AND ${estadoWhere.join(" AND ")}` : ""}
+      GROUP BY days.day
+      ORDER BY days.day;
+    `;
+		const byDate = await sequelize.query(byDateSql, {
+			type: QueryTypes.SELECT,
+			replacements: {
+				startDate,
+				endDate,
+				...(usarFiltroHabit ? { numeros } : {}),
+				...estadoRepl,
+			},
+		});
+
+		const fullyBookedDates = byDate
+			.filter(d => Number(d.roomsReserved) === totalSubset)
+			.map(d => d.date);
+
+		return res.json({
+			range: { startDate, endDate, endExclusive: true },
+			roomCount: totalSubset,
+			rooms,
+			bookings,
+			byDate,
+			fullyBookedDates,
+		});
+	} catch (err) {
+		console.error("Error en calendario:", {
+			message: err?.message,
+			detail: err?.original?.detail || err?.parent?.detail,
+			sql: err?.sql,
+			parameters: err?.parameters,
+			stack: err?.stack,
+		});
+		return res.status(500).json({
+			error: "Calendario: fallo SQL",
+			message: err?.message,
+			detail: err?.original?.detail || err?.parent?.detail || null,
+			sql: err?.sql || null,
+			parameters: err?.parameters || null,
+		});
+	}
+};
+
+
+
+
+/**
  * Crea una nueva reserva, validando y/o creando huésped y calculando el monto total.
  * 
  * @route POST /reservas
@@ -161,21 +341,56 @@ export const createReserva = async (req, res, next) => {
 	} = req.body;
 
 	try {
+		// --- Normalizá fechas a Date (recomendado: validar formato antes) ---
+		const start = new Date(fechaDesde);
+		const end = new Date(fechaHasta);
+
+		// 0) Validación mínima de fechas
+		if (!(start instanceof Date) || isNaN(start) || !(end instanceof Date) || isNaN(end)) {
+			return res.status(400).json({ error: "Fechas inválidas" });
+		}
+		// Cantidad de días (back-to-back permitido => end > start)
+		const dias = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+		if (dias <= 0) return res.status(400).json({ error: "Rango de fechas inválido" });
+
+		// 🔒 0.1) CHEQUEO DE SOLAPAMIENTO (ANTES de crear huésped/hacer más trabajo)
+		// Ajustá el filtro de estados si querés ignorar reservas canceladas, etc.
+		// Por ejemplo: where: { idEstadoReserva: { [Op.in]: [1,2,3] } }
+		const reservaSolapada = await Reserva.findOne({
+			where: {
+				idHabitacion,
+				[Op.and]: [
+					{ fechaDesde: { [Op.lt]: end } }, // existing.start < new.end
+					{ fechaHasta: { [Op.gt]: start } } // existing.end > new.start
+				],
+			},
+			include: [
+				{ model: Huesped, attributes: ["nombre", "apellido", "telefono"] },
+				{ model: Habitacion, attributes: ["numero"] }
+			]
+		});
+
+		if (reservaSolapada) {
+			return res.status(409).json({
+				error: "La habitación ya está reservada en esas fechas.",
+				conflicto: {
+					idReserva: reservaSolapada.idReserva,
+					habitacion: reservaSolapada.Habitacion?.numero,
+					desde: reservaSolapada.fechaDesde,
+					hasta: reservaSolapada.fechaHasta,
+					huesped: reservaSolapada.Huesped
+						? `${reservaSolapada.Huesped.nombre} ${reservaSolapada.Huesped.apellido}`
+						: undefined,
+				}
+			});
+		}
+
 		// 1) Crear o validar huésped
 		if (!idHuesped) {
-			const required = [
-				"dni",
-				"telefono",
-				"email",
-				"origen",
-				"nombre",
-				"apellido",
-			];
+			const required = ["dni", "telefono", "email", "origen", "nombre", "apellido"];
 			const missing = required.filter((f) => !huespedData?.[f]);
 			if (missing.length) {
-				return res
-					.status(400)
-					.json({ error: `Faltan datos para crear huésped: ${missing.join(", ")}` });
+				return res.status(400).json({ error: `Faltan datos para crear huésped: ${missing.join(", ")}` });
 			}
 			const nuevo = await Huesped.create({
 				dni: huespedData.dni,
@@ -188,38 +403,23 @@ export const createReserva = async (req, res, next) => {
 			idHuesped = nuevo.idHuesped;
 		} else {
 			const exist = await Huesped.findByPk(idHuesped);
-			if (!exist) {
-				return res.status(400).json({ error: "Huésped no válido" });
-			}
+			if (!exist) return res.status(400).json({ error: "Huésped no válido" });
 		}
 
-		// 2) Validar habitación y obtener precio desde TipoHabitacion
+		// 2) Validar habitación y obtener precio
 		const habitacion = await Habitacion.findByPk(idHabitacion, {
 			include: [{ model: TipoHabitacion, attributes: ["precio"] }],
 		});
-
-		if (!habitacion) {
-			return res.status(400).json({ error: "Habitación no válida" });
-		}
+		if (!habitacion) return res.status(400).json({ error: "Habitación no válida" });
 
 		const precioPorNoche = habitacion.TipoHabitacion.precio;
 
-		// 3) Calcular montoTotal (precio x días)
-		const dias = Math.ceil(
-			(new Date(fechaHasta) - new Date(fechaDesde)) / (1000 * 60 * 60 * 24)
-		);
-
-		if (dias <= 0) {
-			return res.status(400).json({ error: "Rango de fechas inválido" });
-		}
-
+		// 3) Calcular montoTotal con las fechas ya validadas
 		const montoTotal = precioPorNoche * dias;
 
 		// 4) Validar montoPagado
 		if (montoPagado > montoTotal) {
-			return res
-				.status(400)
-				.json({ error: "La seña no puede ser mayor al monto total" });
+			return res.status(400).json({ error: "La seña no puede ser mayor al monto total" });
 		}
 
 		// 5) Crear reserva
@@ -227,38 +427,25 @@ export const createReserva = async (req, res, next) => {
 			idHuesped,
 			idHabitacion,
 			idEstadoReserva,
-			fechaDesde,
-			fechaHasta,
+			fechaDesde: start, // guardá las Date normalizadas
+			fechaHasta: end,
 			montoPagado,
 			montoTotal,
 		});
 
 		// 6) Devolver datos
 		const reservaCompleta = await Reserva.findByPk(nuevaReserva.idReserva, {
-			attributes: [
-				"idReserva",
-				"fechaDesde",
-				"fechaHasta",
-				"montoPagado",
-				"montoTotal",
-			],
+			attributes: ["idReserva", "fechaDesde", "fechaHasta", "montoPagado", "montoTotal"],
 			include: [
-				{ model: Huesped, attributes: ["dni", "telefono", "email", "origen"] },
-				{
-					model: Habitacion,
-					attributes: ["numero"],
-					include: [{ model: TipoHabitacion, attributes: ["precio"] }],
-				},
+				{ model: Huesped, attributes: ["dni", "telefono", "email", "origen", "nombre", "apellido"] },
+				{ model: Habitacion, attributes: ["numero"], include: [{ model: TipoHabitacion, attributes: ["precio"] }] },
 			],
 		});
 
 		return res.status(201).json(reservaCompleta);
 	} catch (err) {
 		console.error("Error al crear reserva:", err);
-		if (
-			err.name === "SequelizeValidationError" ||
-			err.name === "SequelizeForeignKeyConstraintError"
-		) {
+		if (err.name === "SequelizeValidationError" || err.name === "SequelizeForeignKeyConstraintError") {
 			return res.status(400).json({ error: err.errors.map((e) => e.message) });
 		}
 		return next(err);

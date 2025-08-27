@@ -5,6 +5,7 @@ import {
 	createReserva,
 	updateReserva,
 	deleteReserva,
+	getReservasCalendar2,
 } from "../controllers/index.js";
 import { auditLogger } from "../middlewares/auditLogger.js";
 import { verifyJWT } from "../middlewares/verifyJWT.js";
@@ -26,12 +27,11 @@ const tipoModelo = "reserva";
 router.get("/", authorize(tipoModelo, "read"), getAllReservas);
 
 // Calendario de días completamente ocupados
-router.get("/calendar", authorize(tipoModelo, "read"), getReservasCalendar);
+router.get("/calendar", authorize(tipoModelo, "read"), getReservasCalendar2);
 
 // Crear reserva
 router.post("/", authorize(tipoModelo, "create"), auditLogger(CREATE_RESERVATION), createReserva);
 
-// Actualizar reserva
 // Actualizar reserva
 router.put("/:id", authorize(tipoModelo, "update"), auditLogger(UPDATE_RESERVATION), updateReserva);
 
