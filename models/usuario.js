@@ -36,6 +36,14 @@ export const Usuario = sequelize.define(
 			type: DataTypes.DATE,
 			allowNull: true,
 		},
+		resetToken: {
+			type: DataTypes.STRING,
+			allowNull: true,
+		},
+		resetTokenExpires: {
+			type: DataTypes.DATE,
+			allowNull: true,
+		},
 		idTipoUsuario: {
 			type: DataTypes.INTEGER,
 			allowNull: false,

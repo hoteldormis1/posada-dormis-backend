@@ -199,3 +199,187 @@ function parseTimeToMs(timeStr) {
 	};
 	return value * multipliers[unit];
 }
+
+/**
+ * Solicitar restablecimiento de contraseña
+ * Genera un token y envía un email con el enlace de reseteo
+ */
+export async function requestPasswordReset(req, res) {
+	const { email } = req.body;
+
+	if (!email) {
+		return res.status(400).json({ message: "El email es requerido" });
+	}
+
+	try {
+		const user = await Usuario.findOne({ where: { email: email.toLowerCase().trim() } });
+
+		// Por seguridad, siempre respondemos lo mismo aunque el usuario no exista
+		if (!user) {
+			return res.status(200).json({
+				message: "Si el email existe en nuestro sistema, recibirás un correo con instrucciones para restablecer tu contraseña."
+			});
+		}
+
+		// Generar token de reseteo
+		const resetToken = crypto.randomBytes(32).toString("hex");
+		const resetTokenExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+		// Guardar token en la base de datos
+		user.resetToken = resetToken;
+		user.resetTokenExpires = resetTokenExpires;
+		await user.save();
+
+		// Enviar email
+		try {
+			const appBaseUrl = process.env.APP_BASE_URL || "http://localhost:3000";
+			const resetUrl = `${appBaseUrl}/resetPassword?token=${resetToken}`;
+
+			await sendEmail({
+				to: email,
+				subject: "Restablecimiento de contraseña",
+				html: `
+					<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+						<h2 style="color: #43AC6A;">Restablecimiento de contraseña</h2>
+						<p>Hola ${user.nombre},</p>
+						<p>Recibimos una solicitud para restablecer tu contraseña. Si no fuiste vos, podés ignorar este correo.</p>
+						<p>Para restablecer tu contraseña, hacé click en el siguiente enlace:</p>
+						<p style="margin: 20px 0;">
+							<a href="${resetUrl}" 
+							   style="background-color: #43AC6A; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
+								Restablecer contraseña
+							</a>
+						</p>
+						<p>O copiá y pegá este enlace en tu navegador:</p>
+						<p style="background-color: #f5f5f5; padding: 10px; border-radius: 5px; word-break: break-all;">
+							${resetUrl}
+						</p>
+						<p><strong>Este enlace vence en 1 hora.</strong></p>
+						<p>Saludos,<br>El equipo de Dormis</p>
+					</div>
+				`,
+			});
+		} catch (mailErr) {
+			console.error("Error al enviar email de reseteo:", mailErr);
+			// Eliminar el token si no se pudo enviar el email
+			user.resetToken = null;
+			user.resetTokenExpires = null;
+			await user.save();
+
+			return res.status(500).json({
+				message: "No se pudo enviar el correo de restablecimiento. Intentá nuevamente más tarde."
+			});
+		}
+
+		return res.status(200).json({
+			message: "Si el email existe en nuestro sistema, recibirás un correo con instrucciones para restablecer tu contraseña."
+		});
+
+	} catch (err) {
+		console.error("Error en requestPasswordReset:", err);
+		return res.status(500).json({ message: "Error interno del servidor" });
+	}
+}
+
+/**
+ * Verificar token de reseteo (GET)
+ * Valida si el token es válido y no ha expirado
+ */
+export async function verifyResetToken(req, res) {
+	const { token } = req.query;
+
+	if (!token) {
+		return res.json({ valid: false, message: "Token no proporcionado" });
+	}
+
+	try {
+		const user = await Usuario.findOne({ where: { resetToken: token } });
+
+		if (!user) {
+			return res.json({ valid: false, message: "Token inválido" });
+		}
+
+		if (!user.resetTokenExpires || user.resetTokenExpires < new Date()) {
+			return res.json({ valid: false, message: "Token expirado" });
+		}
+
+		return res.json({
+			valid: true,
+			email: user.email,
+			nombre: user.nombre
+		});
+
+	} catch (err) {
+		console.error("Error en verifyResetToken:", err);
+		return res.status(500).json({ valid: false, message: "Error al verificar token" });
+	}
+}
+
+/**
+ * Restablecer contraseña (POST)
+ * Cambia la contraseña usando el token válido
+ */
+export async function resetPassword(req, res) {
+	const { token, password } = req.body;
+
+	if (!token || !password) {
+		return res.status(400).json({ message: "Token y contraseña son requeridos" });
+	}
+
+	if (password.length < 6) {
+		return res.status(400).json({ message: "La contraseña debe tener al menos 6 caracteres" });
+	}
+
+	try {
+		const user = await Usuario.findOne({ where: { resetToken: token } });
+
+		if (!user) {
+			return res.status(400).json({ message: "Token inválido" });
+		}
+
+		if (!user.resetTokenExpires || user.resetTokenExpires < new Date()) {
+			return res.status(400).json({ message: "Token expirado. Solicitá un nuevo enlace de restablecimiento." });
+		}
+
+		// Cambiar la contraseña
+		const hashedPassword = await bcrypt.hash(password, 10);
+		user.clave = hashedPassword;
+		user.resetToken = null;
+		user.resetTokenExpires = null;
+
+		// Si el usuario no estaba verificado, lo verificamos al cambiar la contraseña
+		if (!user.verificado) {
+			user.verificado = true;
+			user.verifyToken = null;
+			user.verifyTokenExpires = null;
+		}
+
+		await user.save();
+
+		// Opcional: enviar email de confirmación
+		try {
+			await sendEmail({
+				to: user.email,
+				subject: "Contraseña restablecida exitosamente",
+				html: `
+					<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+						<h2 style="color: #43AC6A;">Contraseña actualizada</h2>
+						<p>Hola ${user.nombre},</p>
+						<p>Tu contraseña fue restablecida exitosamente.</p>
+						<p>Si no fuiste vos quien realizó este cambio, por favor contactanos inmediatamente.</p>
+						<p>Saludos,<br>El equipo de Dormis</p>
+					</div>
+				`,
+			});
+		} catch (mailErr) {
+			console.error("Error al enviar email de confirmación:", mailErr);
+			// No fallar si no se puede enviar el email de confirmación
+		}
+
+		return res.json({ message: "Contraseña restablecida exitosamente. Ya podés iniciar sesión." });
+
+	} catch (err) {
+		console.error("Error en resetPassword:", err);
+		return res.status(500).json({ message: "Error interno del servidor" });
+	}
+}
