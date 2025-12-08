@@ -233,7 +233,7 @@ export async function requestPasswordReset(req, res) {
 		// Enviar email
 		try {
 			const appBaseUrl = process.env.APP_BASE_URL || "http://localhost:3000";
-			const resetUrl = `${appBaseUrl}/resetPassword?token=${resetToken}`;
+			const resetUrl = `${appBaseUrl}/resetPassword?token=${encodeURIComponent(resetToken)}`;
 
 			await sendEmail({
 				to: email,
@@ -288,19 +288,24 @@ export async function requestPasswordReset(req, res) {
 export async function verifyResetToken(req, res) {
 	const { token } = req.query;
 
-	if (!token) {
+	if (!token || token.trim() === '') {
 		return res.json({ valid: false, message: "Token no proporcionado" });
 	}
 
 	try {
-		const user = await Usuario.findOne({ where: { resetToken: token } });
+		// Limpiar el token de espacios en blanco
+		const cleanToken = token.trim();
+		
+		const user = await Usuario.findOne({ where: { resetToken: cleanToken } });
 
 		if (!user) {
-			return res.json({ valid: false, message: "Token inválido" });
+			console.log(`Token inválido recibido: ${cleanToken.substring(0, 10)}...`);
+			return res.json({ valid: false, message: "Token inválido o ya fue utilizado" });
 		}
 
 		if (!user.resetTokenExpires || user.resetTokenExpires < new Date()) {
-			return res.json({ valid: false, message: "Token expirado" });
+			console.log(`Token expirado para usuario: ${user.email}`);
+			return res.json({ valid: false, message: "Token expirado. Solicitá un nuevo enlace de restablecimiento." });
 		}
 
 		return res.json({
@@ -331,13 +336,18 @@ export async function resetPassword(req, res) {
 	}
 
 	try {
-		const user = await Usuario.findOne({ where: { resetToken: token } });
+		// Limpiar el token de espacios en blanco
+		const cleanToken = token.trim();
+		
+		const user = await Usuario.findOne({ where: { resetToken: cleanToken } });
 
 		if (!user) {
-			return res.status(400).json({ message: "Token inválido" });
+			console.log(`Intento de reset con token inválido: ${cleanToken.substring(0, 10)}...`);
+			return res.status(400).json({ message: "Token inválido o ya fue utilizado. Solicitá un nuevo enlace de restablecimiento." });
 		}
 
 		if (!user.resetTokenExpires || user.resetTokenExpires < new Date()) {
+			console.log(`Intento de reset con token expirado para usuario: ${user.email}`);
 			return res.status(400).json({ message: "Token expirado. Solicitá un nuevo enlace de restablecimiento." });
 		}
 

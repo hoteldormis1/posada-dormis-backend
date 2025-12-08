@@ -1,5 +1,6 @@
 import { Habitacion } from "../models/habitacion.js";
 import { TipoHabitacion } from "../models/tipoHabitacion.js";
+import { Reserva } from "../models/reserva.js";
 import { Op, Sequelize, QueryTypes } from "sequelize";
 import { sequelize } from "../db.js";
 
@@ -159,10 +160,29 @@ export const deleteHabitacion = async (req, res, next) => {
 		const h = await Habitacion.findByPk(req.params.id);
 		if (!h) return res.status(404).json({ error: "No existe habitación" });
 
+		// Verificar si existen reservas asociadas a esta habitación
+		const reservasCount = await Reserva.count({
+			where: { idHabitacion: req.params.id }
+		});
+
+		if (reservasCount > 0) {
+			return res.status(400).json({ 
+				error: `No se puede eliminar la habitación porque tiene ${reservasCount} reserva${reservasCount > 1 ? 's' : ''} asociada${reservasCount > 1 ? 's' : ''}. Por favor, elimine primero las reservas.` 
+			});
+		}
+
 		await h.destroy();
 		res.status(204).end();
 	} catch (err) {
 		console.error(`Error eliminando habitación ${req.params.id}:`, err);
+		
+		// Manejar específicamente errores de foreign key
+		if (err.name === 'SequelizeForeignKeyConstraintError') {
+			return res.status(400).json({ 
+				error: 'No se puede eliminar la habitación porque tiene reservas asociadas. Por favor, elimine primero las reservas.' 
+			});
+		}
+		
 		next(err);
 	}
 };
