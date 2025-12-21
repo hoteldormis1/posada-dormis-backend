@@ -7,7 +7,7 @@ import habitacionRouter from "./habitacion.routes.js";
 import tipoHabitacionRouter from "./tipoHabitacion.routes.js";
 import estadoReservaRouter from "./estadoReserva.routes.js";
 import authRouter from "./auth.routes.js";
-import auditoriasRouter from "./Auditoria.routes.js";
+import auditoriasRouter from "./auditoria.routes.js";
 import dashboardRouter from "./dashboard.routes.js";
 import { verifyJWT } from "../middlewares/verifyJWT.js";
 
