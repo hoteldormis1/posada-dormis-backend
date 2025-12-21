@@ -2,7 +2,6 @@
 import { DataTypes } from "sequelize";
 import { sequelize } from "../db.js";
 import { TipoHabitacion } from "./tipoHabitacion.js";
-import { EstadoHabitacion } from "./estadoHabitacion.js";
 
 export const Habitacion = sequelize.define(
 	"Habitacion",
@@ -13,10 +12,6 @@ export const Habitacion = sequelize.define(
 			autoIncrement: true,
 		},
 		idTipoHabitacion: {
-			type: DataTypes.INTEGER,
-			allowNull: false,
-		},
-		idEstadoHabitacion: {
 			type: DataTypes.INTEGER,
 			allowNull: false,
 		},
@@ -35,6 +30,3 @@ export const Habitacion = sequelize.define(
 // Asociaciones
 Habitacion.belongsTo(TipoHabitacion, { foreignKey: "idTipoHabitacion" });
 TipoHabitacion.hasMany(Habitacion, { foreignKey: "idTipoHabitacion" });
-
-Habitacion.belongsTo(EstadoHabitacion, { foreignKey: "idEstadoHabitacion" });
-EstadoHabitacion.hasMany(Habitacion, { foreignKey: "idEstadoHabitacion" });

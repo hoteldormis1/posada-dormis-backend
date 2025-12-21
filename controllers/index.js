@@ -1,5 +1,5 @@
 export * from "./auth.controller.js";
-export * from "./estadoHabitacion.js";
+export * from "./estadoReserva.controller.js";
 export * from "./huesped.controller.js";
 export * from "./habitacion.controller.js";
 export * from "./reserva.controller.js";

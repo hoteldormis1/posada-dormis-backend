@@ -46,7 +46,7 @@
 
 | Método | Ruta                             | Descripción                         |
 |--------|----------------------------------|-------------------------------------|
-| GET    | `/api/estadoHabitaciones`        | Listar todos los estados de habitación |
+| GET    | `/api/estadoReservas`        | Listar todos los estados de habitación |
 
 ---
 

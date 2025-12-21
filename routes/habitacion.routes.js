@@ -9,20 +9,23 @@ import {
 } from "../controllers/index.js";
 import { auditLogger } from "../middlewares/auditLogger.js";
 import { CREATE_ROOM, DELETE_ROOM, UPDATE_ROOM } from "../constants/index.js";
+import { authorize } from "../middlewares/authorize.js";
 
 const router = Router();
 
-router.get("/", getAllHabitaciones);
+const tipoModelo = "habitacion";
+
+router.get("/", authorize(tipoModelo, "read"), getAllHabitaciones);
 
 // Crear habitación
-router.post("/", auditLogger(CREATE_ROOM), createHabitacion);
+router.post("/", authorize(tipoModelo, "create"), auditLogger(CREATE_ROOM), createHabitacion);
 
 // Actualizar habitación →
-router.put("/:id", auditLogger(UPDATE_ROOM), updateHabitacion);
+router.put("/:id", authorize(tipoModelo, "update"), auditLogger(UPDATE_ROOM), updateHabitacion);
 
-router.get("/disponibles", getHabitacionesDisponiblesPorDia);
+router.get("/disponibles", authorize(tipoModelo, "read"), getHabitacionesDisponiblesPorDia);
 
 // Eliminar habitación
-router.delete("/:id", auditLogger(DELETE_ROOM), deleteHabitacion);
+router.delete("/:id", authorize(tipoModelo, "delete"), auditLogger(DELETE_ROOM), deleteHabitacion);
 
 export default router;

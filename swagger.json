@@ -530,7 +530,7 @@
                   "idTipoHabitacion": {
                     "example": "any"
                   },
-                  "idEstadoHabitacion": {
+                  "idEstadoReserva": {
                     "example": "any"
                   },
                   "numero": {
@@ -623,7 +623,7 @@
                   "idTipoHabitacion": {
                     "example": "any"
                   },
-                  "idEstadoHabitacion": {
+                  "idEstadoReserva": {
                     "example": "any"
                   },
                   "numero": {
@@ -721,7 +721,7 @@
         }
       }
     },
-    "/api/estadoHabitaciones/": {
+    "/api/estadoReserva/": {
       "get": {
         "description": "",
         "parameters": [

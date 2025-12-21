@@ -11,6 +11,7 @@ import swaggerUi from "swagger-ui-express";
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
+import { ensureDefaultReservaStates, ensureDefaultRoles } from "./helpers/ensureDefaults.js";
 
 dotenv.config();
 const app = express();
@@ -47,11 +48,14 @@ app.use(express.json());
 app.use(cookieParser());
 app.use("/api", routes);
 
+
 const port = Number(process.env.PORT) || 4000;
 sequelize
 	.sync({ alter: true })
-	.then(() => {
+	.then(async () => {
 		console.log("✅ DB sincronizada");
+		await ensureDefaultRoles();
+		await ensureDefaultReservaStates();
 		app.listen(port, () => {
 			console.log(`🚀 Servidor corriendo en http://localhost:${port}`);
 			if (process.env.NODE_ENV !== "production") {

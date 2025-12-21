@@ -4,6 +4,7 @@ import { sequelize } from "../db.js";
 import { Huesped } from "./huesped.js";
 import { Usuario } from "./usuario.js";
 import { Habitacion } from "./habitacion.js";
+import { EstadoReserva } from "./estadoReserva.js";
 
 export const Reserva = sequelize.define(
 	"Reserva",
@@ -53,3 +54,6 @@ Huesped.hasMany(Reserva, { foreignKey: "idHuesped" });
 
 Reserva.belongsTo(Habitacion, { foreignKey: "idHabitacion" });
 Habitacion.hasMany(Reserva, { foreignKey: "idHabitacion" });
+
+Reserva.belongsTo(EstadoReserva, { foreignKey: "idEstadoReserva" });
+EstadoReserva.hasMany(Reserva, { foreignKey: "idEstadoReserva" });

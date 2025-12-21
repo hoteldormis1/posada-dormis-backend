@@ -5,10 +5,14 @@ import {
 	logout,
 	refresh,
 	register,
+	verifyGet,
+	verifyPost,
+	requestPasswordReset,
+	verifyResetToken,
+	resetPassword,
 } from "../controllers/auth.controller.js";
 import { auditLogger } from "../middlewares/auditLogger.js";
 import { LOGIN_ATTEMPT, LOGOUT, USER_REGISTER } from "../constants/index.js";
-import { verifyJWT } from "../middlewares/verifyJWT.js";
 
 const router = express.Router();
 
@@ -20,6 +24,15 @@ router.post("/refresh", refresh);
 
 //register
 router.post("/register", auditLogger(USER_REGISTER), register);
+
+// verify account
+router.get("/verify", verifyGet);
+router.post("/verify", verifyPost);
+
+// password reset
+router.post("/password-reset/request", loginLimiter, requestPasswordReset);
+router.get("/password-reset/verify", verifyResetToken);
+router.post("/password-reset/reset", resetPassword);
 
 //logout
 router.post("/logout", auditLogger(LOGOUT), logout);

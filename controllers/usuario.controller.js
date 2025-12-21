@@ -21,11 +21,11 @@ export const getAllUsuarios = async (req, res, next) => {
 
 		const whereCondition = search
 			? {
-					[Op.or]: [
-						{ nombre: { [Op.iLike]: `%${search}%` } },
-						{ email: { [Op.iLike]: `%${search}%` } },
-					],
-			  }
+				[Op.or]: [
+					{ nombre: { [Op.iLike]: `%${search}%` } },
+					{ email: { [Op.iLike]: `%${search}%` } },
+				],
+			}
 			: {};
 
 		const { count, rows } = await Usuario.findAndCountAll({
@@ -62,6 +62,40 @@ export const deleteUsuario = async (req, res, next) => {
 		return res.status(204).end();
 	} catch (err) {
 		console.error(`Error al eliminar usuario ${req.params.id}:`, err);
+		return next(err);
+	}
+};
+
+/**
+ * GET /usuarios/me
+ * Devuelve el usuario autenticado (sin la clave).
+ */
+export const getCurrentUsuario = async (req, res, next) => {
+	try {
+		const userId =
+			req.user?.idUsuario ||
+			req.user?.userId ||
+			req.auth?.userId ||
+			req.userId ||
+			res?.locals?.user?.idUsuario ||
+			res?.locals?.user?.userId ||
+			null;
+
+		if (!userId) {
+			return res.status(401).json({ error: "No autenticado" });
+		}
+
+		const user = await Usuario.findByPk(userId, {
+			attributes: ["idUsuario", "nombre", "email", "idTipoUsuario", "verificado"], // 👈 solo estos campos
+		});
+
+		if (!user) {
+			return res.status(404).json({ error: "Usuario no encontrado" });
+		}
+
+		return res.json(user);
+	} catch (err) {
+		console.error("Error al obtener el usuario actual:", err);
 		return next(err);
 	}
 };

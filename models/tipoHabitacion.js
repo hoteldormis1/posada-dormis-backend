@@ -10,9 +10,10 @@ export const TipoHabitacion = sequelize.define(
 			primaryKey: true,
 			autoIncrement: true,
 		},
-		tipo: {
+		nombre: {
 			type: DataTypes.STRING,
 			allowNull: false,
+			unique: true,
 		},
 		precio: {
 			type: DataTypes.FLOAT,
