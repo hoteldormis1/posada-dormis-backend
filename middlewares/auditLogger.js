@@ -1,4 +1,4 @@
-import { Auditoria } from "../models/Auditoria.js";
+import { Auditoria } from "../models/auditoria.js";
 
 const SENSITIVE_KEYS = ["clave", "password", "token"]; // podés agregar más
 
