@@ -16,6 +16,8 @@ import { ensureDefaultReservaStates, ensureDefaultRoles } from "./helpers/ensure
 dotenv.config();
 const app = express();
 
+app.set('trust proxy', 1);
+
 // Resolver __dirname en ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
