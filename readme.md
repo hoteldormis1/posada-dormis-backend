@@ -2,7 +2,9 @@
 
 ---
 
-## 🔐 Auth (sin JWT)
+## 🌐 Rutas Públicas (sin autenticación)
+
+### Auth
 
 | Método | Ruta                 | Descripción                                        |
 |--------|----------------------|----------------------------------------------------|
@@ -10,6 +12,13 @@
 | POST   | `/api/auth/refresh`  | Refrescar `accessToken` usando cookie             |
 | POST   | `/api/auth/logout`   | Cerrar sesión (elimina cookie)                    |
 | POST   | `/api/auth/register` | Registrar nuevo usuario                           |
+
+### Reservas Públicas
+
+| Método | Ruta                                       | Descripción                                        |
+|--------|--------------------------------------------|----------------------------------------------------|
+| GET    | `/api/public/habitaciones/disponibles`     | Buscar habitaciones disponibles por rango de fechas. Query params: `fechaInicio` (YYYY-MM-DD) y `fechaFin` (YYYY-MM-DD) |
+| POST   | `/api/public/reservas`                     | Crear reserva pública (estado: pendiente). Body: `{ huesped: { nombre, apellido, dni, telefono, email, origen }, idHabitacion, fechaDesde, fechaHasta }` |
 
 ---
 

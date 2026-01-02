@@ -9,13 +9,17 @@ import estadoReservaRouter from "./estadoReserva.routes.js";
 import authRouter from "./auth.routes.js";
 import auditoriasRouter from "./auditoria.routes.js";
 import dashboardRouter from "./dashboard.routes.js";
+import publicRouter from "./public.routes.js";
 import { verifyJWT } from "../middlewares/verifyJWT.js";
 
 const router = express.Router();
 
-// ⚠️ IMPORTANTE: Las rutas de auth DEBEN ir ANTES de verifyJWT
-// para que sean públicas (login, register, password-reset, etc.)
+// ⚠️ IMPORTANTE: Las rutas públicas DEBEN ir ANTES de verifyJWT
+// Auth routes (login, register, password-reset, etc.)
 router.use("/auth", authRouter);
+
+// Public routes (reservas públicas, búsqueda de habitaciones)
+router.use("/public", publicRouter);
 
 // 🔒 Todas las rutas DESPUÉS de este middleware requieren autenticación
 router.use(verifyJWT);
