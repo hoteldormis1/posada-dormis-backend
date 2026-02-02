@@ -49,10 +49,8 @@ export const getAllHabitaciones = async (req, res, next) => {
 		const formattedData = rows.map((h) => ({
 			idHabitacion: h.idHabitacion,
 			numero: h.numero,
-			precio: h.TipoHabitacion?.precio ?? null, // o precioBase si lo cambiaste
-			habilitada: h.habilitada,
+			precio: h.TipoHabitacion?.precio ?? null,
 			tipo: h.TipoHabitacion?.nombre ?? null,
-			// estado: eliminado
 		}));
 
 		res.json({
@@ -97,6 +95,64 @@ export const getHabitacionesDisponiblesPorDia = async (req, res, next) => {
 		res.json({ date, rooms });
 	} catch (err) {
 		console.error("Error al obtener habitaciones disponibles:", err);
+		next(err);
+	}
+};
+
+// GET /public/habitaciones/disponibles?fechaInicio=YYYY-MM-DD&fechaFin=YYYY-MM-DD
+export const getHabitacionesDisponiblesPublico = async (req, res, next) => {
+	try {
+		const { fechaInicio, fechaFin } = req.query;
+
+		if (!fechaInicio || !fechaFin) {
+			return res.status(400).json({ error: "Faltan parámetros fechaInicio y fechaFin (YYYY-MM-DD)" });
+		}
+
+		// Validar que las fechas sean válidas
+		const inicio = new Date(fechaInicio);
+		const fin = new Date(fechaFin);
+
+		if (isNaN(inicio) || isNaN(fin)) {
+			return res.status(400).json({ error: "Formato de fecha inválido" });
+		}
+
+		if (fin <= inicio) {
+			return res.status(400).json({ error: "La fecha de fin debe ser posterior a la fecha de inicio" });
+		}
+
+		// Consulta SQL para obtener habitaciones disponibles en el rango de fechas
+		const sql = `
+		WITH occupied AS (
+			SELECT DISTINCT r."idHabitacion"
+			FROM "Reserva" r
+			WHERE r."fechaDesde"::date < :fechaFin::date
+			  AND r."fechaHasta"::date > :fechaInicio::date
+		)
+		SELECT 
+			h."idHabitacion",
+			h."numero",
+			th."nombre" as tipo,
+			th."precio",
+			h."idTipoHabitacion"
+		FROM "Habitacion" h
+		INNER JOIN "TipoHabitacion" th ON th."idTipoHabitacion" = h."idTipoHabitacion"
+		LEFT JOIN occupied o ON o."idHabitacion" = h."idHabitacion"
+		WHERE o."idHabitacion" IS NULL
+		ORDER BY th."precio", h."numero";
+	`;
+
+		const habitaciones = await sequelize.query(sql, {
+			replacements: { fechaInicio, fechaFin },
+			type: QueryTypes.SELECT,
+		});
+
+		res.json({
+			fechaInicio,
+			fechaFin,
+			habitaciones
+		});
+	} catch (err) {
+		console.error("Error al obtener habitaciones disponibles (público):", err);
 		next(err);
 	}
 };
@@ -166,8 +222,8 @@ export const deleteHabitacion = async (req, res, next) => {
 		});
 
 		if (reservasCount > 0) {
-			return res.status(400).json({ 
-				error: `No se puede eliminar la habitación porque tiene ${reservasCount} reserva${reservasCount > 1 ? 's' : ''} asociada${reservasCount > 1 ? 's' : ''}. Por favor, elimine primero las reservas.` 
+			return res.status(400).json({
+				error: `No se puede eliminar la habitación porque tiene ${reservasCount} reserva${reservasCount > 1 ? 's' : ''} asociada${reservasCount > 1 ? 's' : ''}. Por favor, elimine primero las reservas.`
 			});
 		}
 
@@ -175,14 +231,14 @@ export const deleteHabitacion = async (req, res, next) => {
 		res.status(204).end();
 	} catch (err) {
 		console.error(`Error eliminando habitación ${req.params.id}:`, err);
-		
+
 		// Manejar específicamente errores de foreign key
 		if (err.name === 'SequelizeForeignKeyConstraintError') {
-			return res.status(400).json({ 
-				error: 'No se puede eliminar la habitación porque tiene reservas asociadas. Por favor, elimine primero las reservas.' 
+			return res.status(400).json({
+				error: 'No se puede eliminar la habitación porque tiene reservas asociadas. Por favor, elimine primero las reservas.'
 			});
 		}
-		
+
 		next(err);
 	}
 };

@@ -499,3 +499,147 @@ export const deleteReserva = async (req, res, next) => {
 		return next(err);
 	}
 };
+
+/**
+ * Crea una reserva pública (sin autenticación). La reserva se crea con estado "pendiente".
+ * 
+ * @route POST /public/reservas
+ * @body {Object} huesped Datos del huésped (dni, telefono, email, origen, nombre, apellido).
+ * @body {number} idHabitacion ID de la habitación.
+ * @body {string} fechaDesde Fecha de inicio (YYYY-MM-DD).
+ * @body {string} fechaHasta Fecha de fin (YYYY-MM-DD).
+ * @returns {Object} Datos completos de la reserva creada.
+ */
+export const createReservaPublica = async (req, res, next) => {
+	const {
+		huesped: huespedData,
+		idHabitacion,
+		fechaDesde,
+		fechaHasta,
+	} = req.body;
+
+	try {
+		// --- Validar datos del huésped ---
+		const required = ["dni", "telefono", "origen", "nombre", "apellido"];
+		const missing = required.filter((f) => !huespedData?.[f]);
+		if (missing.length) {
+			return res.status(400).json({
+				error: `Faltan datos del huésped: ${missing.join(", ")}`
+			});
+		}
+
+		// --- Validar habitación ---
+		if (!idHabitacion) {
+			return res.status(400).json({ error: "Falta idHabitacion" });
+		}
+
+		// --- Validar fechas ---
+		if (!fechaDesde || !fechaHasta) {
+			return res.status(400).json({ error: "Faltan fechas (fechaDesde, fechaHasta)" });
+		}
+
+		const start = new Date(fechaDesde);
+		const end = new Date(fechaHasta);
+
+		if (isNaN(start) || isNaN(end)) {
+			return res.status(400).json({ error: "Formato de fecha inválido" });
+		}
+
+		const dias = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+		if (dias <= 0) {
+			return res.status(400).json({ error: "La fecha de salida debe ser posterior a la fecha de entrada" });
+		}
+
+		// --- Verificar disponibilidad ---
+		const reservaSolapada = await Reserva.findOne({
+			where: {
+				idHabitacion,
+				[Op.and]: [
+					{ fechaDesde: { [Op.lt]: end } },
+					{ fechaHasta: { [Op.gt]: start } }
+				],
+			},
+		});
+
+		if (reservaSolapada) {
+			return res.status(409).json({
+				error: "La habitación ya está reservada en esas fechas.",
+			});
+		}
+
+		// --- Verificar que la habitación exista y obtener precio ---
+		const habitacion = await Habitacion.findByPk(idHabitacion, {
+			include: [{ model: TipoHabitacion, attributes: ["precio"] }],
+		});
+
+		if (!habitacion) {
+			return res.status(400).json({ error: "Habitación no válida" });
+		}
+
+		const precioPorNoche = habitacion.TipoHabitacion.precio;
+		const montoTotal = precioPorNoche * dias;
+
+		// --- Buscar o crear huésped por DNI ---
+		let huesped = await Huesped.findOne({ where: { dni: huespedData.dni } });
+
+		if (!huesped) {
+			huesped = await Huesped.create({
+				dni: huespedData.dni,
+				telefono: huespedData.telefono,
+				email: huespedData.email || null,
+				origen: huespedData.origen,
+				nombre: huespedData.nombre,
+				apellido: huespedData.apellido,
+				direccion: huespedData.direccion || null,
+			});
+		}
+
+		// --- Obtener el ID del estado "pendiente" ---
+		// Asumiendo que existe un estado con nombre "pendiente" o "Pendiente"
+		const { EstadoReserva } = await import("../models/estadoReserva.js");
+		let estadoPendiente = await EstadoReserva.findOne({
+			where: { nombre: { [Op.iLike]: "pendiente" } }
+		});
+
+		if (!estadoPendiente) {
+			// Si no existe, crear el estado pendiente
+			estadoPendiente = await EstadoReserva.create({ nombre: "Pendiente" });
+		}
+
+		// --- Crear reserva con estado pendiente y monto pagado en 0 ---
+		const nuevaReserva = await Reserva.create({
+			idHuesped: huesped.idHuesped,
+			idHabitacion,
+			idEstadoReserva: estadoPendiente.idEstadoReserva,
+			fechaDesde: start,
+			fechaHasta: end,
+			montoPagado: 0,
+			montoTotal,
+		});
+
+		// --- Devolver datos de la reserva ---
+		const reservaCompleta = await Reserva.findByPk(nuevaReserva.idReserva, {
+			attributes: ["idReserva", "fechaDesde", "fechaHasta", "montoPagado", "montoTotal"],
+			include: [
+				{ model: Huesped, attributes: ["dni", "telefono", "email", "origen", "nombre", "apellido"] },
+				{
+					model: Habitacion,
+					attributes: ["numero"],
+					include: [{ model: TipoHabitacion, attributes: ["precio", "nombre"] }]
+				},
+			],
+		});
+
+		return res.status(201).json({
+			success: true,
+			mensaje: "Reserva creada exitosamente. Estado: PENDIENTE",
+			reserva: reservaCompleta,
+		});
+	} catch (err) {
+		console.error("Error al crear reserva pública:", err);
+		if (err.name === "SequelizeValidationError" || err.name === "SequelizeForeignKeyConstraintError") {
+			return res.status(400).json({ error: err.errors.map((e) => e.message) });
+		}
+		return next(err);
+	}
+};
