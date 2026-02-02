@@ -41,18 +41,26 @@ export async function login(req, res) {
 			return res.status(401).json({ message: "Credenciales inválidas" });
 		}
 
-		const { refreshToken } = generateTokens(user.idUsuario); // solo refresh
+	const { refreshToken } = generateTokens(user.idUsuario); // solo refresh
 
-		// *** Cambio clave: SameSite=None en prod + secure; path consistente ***
-		res.cookie(REFRESH_COOKIE_NAME, refreshToken, {
-			httpOnly: true,
-			secure: IS_PROD, // requerido con SameSite=None
-			sameSite: IS_PROD ? "None" : "Lax", // Lax en dev, None en prod
-			path: REFRESH_COOKIE_PATH, // igual que en clearCookie
-			maxAge: parseTimeToMs(EXP_REFRESH),
-		});
+	// Primero limpiar cualquier cookie vieja
+	res.clearCookie(REFRESH_COOKIE_NAME, {
+		httpOnly: true,
+		secure: IS_PROD,
+		sameSite: IS_PROD ? "None" : "Lax",
+		path: REFRESH_COOKIE_PATH,
+	});
 
-		return res.status(200).json({ message: "Login exitoso" });
+	// Luego setear la nueva cookie
+	res.cookie(REFRESH_COOKIE_NAME, refreshToken, {
+		httpOnly: true,
+		secure: IS_PROD, // requerido con SameSite=None
+		sameSite: IS_PROD ? "None" : "Lax", // Lax en dev, None en prod
+		path: REFRESH_COOKIE_PATH, // igual que en clearCookie
+		maxAge: parseTimeToMs(EXP_REFRESH),
+	});
+
+	return res.status(200).json({ message: "Login exitoso" });
 	} catch (err) {
 		console.error("Error en login:", err);
 		return res.status(500).json({ message: "Error interno del servidor" });
@@ -61,8 +69,8 @@ export async function login(req, res) {
 
 export function refresh(req, res) {
 	const token = req.cookies?.[REFRESH_COOKIE_NAME];
+	
 	if (!token) {
-		// *** Cambio clave: mensaje exactamente como el que ves en prod ***
 		return res.status(401).json({ error: "Falta el token de acceso" });
 	}
 
@@ -75,7 +83,16 @@ export function refresh(req, res) {
 
 		return res.json({ accessToken });
 	} catch (err) {
-		console.error("Error en refresh token:", err);
+		console.error("Error en refresh token:", err.message);
+		
+		// Si el token es inválido, limpiar la cookie
+		res.clearCookie(REFRESH_COOKIE_NAME, {
+			httpOnly: true,
+			secure: IS_PROD,
+			sameSite: IS_PROD ? "None" : "Lax",
+			path: REFRESH_COOKIE_PATH,
+		});
+		
 		return res.status(403).json({ message: "Token inválido o expirado" });
 	}
 }

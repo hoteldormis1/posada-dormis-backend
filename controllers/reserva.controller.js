@@ -520,7 +520,7 @@ export const createReservaPublica = async (req, res, next) => {
 
 	try {
 		// --- Validar datos del huésped ---
-		const required = ["dni", "telefono", "email", "origen", "nombre", "apellido"];
+		const required = ["dni", "telefono", "origen", "nombre", "apellido"];
 		const missing = required.filter((f) => !huespedData?.[f]);
 		if (missing.length) {
 			return res.status(400).json({
@@ -586,10 +586,11 @@ export const createReservaPublica = async (req, res, next) => {
 			huesped = await Huesped.create({
 				dni: huespedData.dni,
 				telefono: huespedData.telefono,
-				email: huespedData.email,
+				email: huespedData.email || null,
 				origen: huespedData.origen,
 				nombre: huespedData.nombre,
 				apellido: huespedData.apellido,
+				direccion: huespedData.direccion || null,
 			});
 		}
 

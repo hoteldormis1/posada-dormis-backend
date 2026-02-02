@@ -6,7 +6,6 @@ const requiredFields = [
 	"apellido",
 	"dni",
 	"telefono",
-	"email",
 	"origen",
 ];
 
@@ -51,6 +50,53 @@ export const createHuesped = async (req, res, next) => {
 		) {
 			return res.status(400).json({ error: err.errors.map((e) => e.message) });
 		}
+		next(err);
+	}
+};
+
+export const updateHuesped = async (req, res, next) => {
+	try {
+		const huesped = await Huesped.findByPk(req.params.id);
+		if (!huesped) {
+			return res.status(404).json({ error: "No existe huésped" });
+		}
+
+		// Validar campos obligatorios si se envían
+		const missing = requiredFields.filter(
+			(field) => req.body[field] !== undefined && !req.body[field]
+		);
+		if (missing.length) {
+			return res.status(400).json({
+				error: `Campos obligatorios vacíos: ${missing.join(", ")}`,
+			});
+		}
+
+		await huesped.update(req.body);
+		const actualizado = await Huesped.findByPk(req.params.id);
+		res.json(actualizado);
+	} catch (err) {
+		console.error(`Error al actualizar huésped ${req.params.id}:`, err);
+		if (
+			err instanceof Sequelize.ValidationError ||
+			err instanceof Sequelize.UniqueConstraintError
+		) {
+			return res.status(400).json({ error: err.errors.map((e) => e.message) });
+		}
+		next(err);
+	}
+};
+
+export const deleteHuesped = async (req, res, next) => {
+	try {
+		const huesped = await Huesped.findByPk(req.params.id);
+		if (!huesped) {
+			return res.status(404).json({ error: "No existe huésped" });
+		}
+
+		await huesped.destroy();
+		res.status(204).end();
+	} catch (err) {
+		console.error(`Error al eliminar huésped ${req.params.id}:`, err);
 		next(err);
 	}
 };

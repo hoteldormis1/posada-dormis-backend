@@ -22,18 +22,22 @@ export const Huesped = sequelize.define(
 			type: DataTypes.INTEGER,
 			allowNull: false,
 		},
-		telefono: {
-			type: DataTypes.STRING,
-			allowNull: false,
-		},
-		email: {
-			type: DataTypes.STRING,
-			allowNull: false,
-		},
-		origen: {
-			type: DataTypes.STRING,
-			allowNull: false,
-		},
+	telefono: {
+		type: DataTypes.STRING,
+		allowNull: false,
+	},
+	email: {
+		type: DataTypes.STRING,
+		allowNull: true,
+	},
+	origen: {
+		type: DataTypes.STRING,
+		allowNull: false,
+	},
+	direccion: {
+		type: DataTypes.STRING,
+		allowNull: true,
+	},
 	},
 	{
 		tableName: "Huesped",
