@@ -1,10 +1,10 @@
 // routes/public.routes.js
 import { Router } from "express";
-import { 
-	getHabitacionesDisponiblesPublico 
+import {
+	getHabitacionesDisponiblesPublico
 } from "../controllers/habitacion.controller.js";
-import { 
-	createReservaPublica 
+import {
+	createReservaPublica
 } from "../controllers/reserva.controller.js";
 
 const router = Router();

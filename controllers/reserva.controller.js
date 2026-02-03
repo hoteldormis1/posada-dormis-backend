@@ -26,7 +26,6 @@ export const getAllReservas = async (req, res, next) => {
 			huespedNombre: r.Huesped ? `${r.Huesped.nombre} ${r.Huesped.apellido}` : "-",
 			telefonoHuesped: r.Huesped?.telefono ?? "-",
 			dniHuesped: r.Huesped?.dni ?? "-",
-			emailHuesped: r.Huesped?.email ?? "-",
 			montoPagado: r.montoPagado,
 			total: r.montoTotal,
 			estadoDeReserva: r.idEstadoReserva,
@@ -320,7 +319,7 @@ export const getReservasCalendar2 = async (req, res, next) => {
  * 
  * @route POST /reservas
  * @body {number} [idHuesped] ID de huésped existente (si no se envía, se crea uno nuevo con datos en `huesped`).
- * @body {Object} [huesped] Datos del huésped a crear (dni, telefono, email, origen, nombre, apellido).
+ * @body {Object} [huesped] Datos del huésped a crear (dni, telefono, origen, nombre, apellido).
  * @body {number} idHabitacion ID de la habitación.
  * @body {number} idEstadoReserva ID del estado de la reserva.
  * @body {string} fechaDesde Fecha de inicio (YYYY-MM-DD).
@@ -387,7 +386,7 @@ export const createReserva = async (req, res, next) => {
 
 		// 1) Crear o validar huésped
 		if (!idHuesped) {
-			const required = ["dni", "telefono", "email", "origen", "nombre", "apellido"];
+			const required = ["dni", "telefono", "origen", "nombre", "apellido"];
 			const missing = required.filter((f) => !huespedData?.[f]);
 			if (missing.length) {
 				return res.status(400).json({ error: `Faltan datos para crear huésped: ${missing.join(", ")}` });
@@ -395,7 +394,6 @@ export const createReserva = async (req, res, next) => {
 			const nuevo = await Huesped.create({
 				dni: huespedData.dni,
 				telefono: huespedData.telefono,
-				email: huespedData.email,
 				origen: huespedData.origen,
 				nombre: huespedData.nombre,
 				apellido: huespedData.apellido,
@@ -437,7 +435,7 @@ export const createReserva = async (req, res, next) => {
 		const reservaCompleta = await Reserva.findByPk(nuevaReserva.idReserva, {
 			attributes: ["idReserva", "fechaDesde", "fechaHasta", "montoPagado", "montoTotal"],
 			include: [
-				{ model: Huesped, attributes: ["dni", "telefono", "email", "origen", "nombre", "apellido"] },
+				{ model: Huesped, attributes: ["dni", "telefono", "origen", "nombre", "apellido"] },
 				{ model: Habitacion, attributes: ["numero"], include: [{ model: TipoHabitacion, attributes: ["precio"] }] },
 			],
 		});
@@ -504,7 +502,7 @@ export const deleteReserva = async (req, res, next) => {
  * Crea una reserva pública (sin autenticación). La reserva se crea con estado "pendiente".
  * 
  * @route POST /public/reservas
- * @body {Object} huesped Datos del huésped (dni, telefono, email, origen, nombre, apellido).
+ * @body {Object} huesped Datos del huésped (dni, telefono, origen, nombre, apellido).
  * @body {number} idHabitacion ID de la habitación.
  * @body {string} fechaDesde Fecha de inicio (YYYY-MM-DD).
  * @body {string} fechaHasta Fecha de fin (YYYY-MM-DD).
@@ -586,7 +584,6 @@ export const createReservaPublica = async (req, res, next) => {
 			huesped = await Huesped.create({
 				dni: huespedData.dni,
 				telefono: huespedData.telefono,
-				email: huespedData.email || null,
 				origen: huespedData.origen,
 				nombre: huespedData.nombre,
 				apellido: huespedData.apellido,
@@ -621,7 +618,7 @@ export const createReservaPublica = async (req, res, next) => {
 		const reservaCompleta = await Reserva.findByPk(nuevaReserva.idReserva, {
 			attributes: ["idReserva", "fechaDesde", "fechaHasta", "montoPagado", "montoTotal"],
 			include: [
-				{ model: Huesped, attributes: ["dni", "telefono", "email", "origen", "nombre", "apellido"] },
+				{ model: Huesped, attributes: ["dni", "telefono", "origen", "nombre", "apellido"] },
 				{
 					model: Habitacion,
 					attributes: ["numero"],
