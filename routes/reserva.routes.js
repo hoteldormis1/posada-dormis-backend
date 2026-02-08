@@ -6,6 +6,10 @@ import {
 	updateReserva,
 	deleteReserva,
 	getReservasCalendar2,
+	checkinReserva,
+	checkoutReserva,
+	confirmarReserva,
+	cancelarReserva,
 } from "../controllers/index.js";
 import { auditLogger } from "../middlewares/auditLogger.js";
 import { verifyJWT } from "../middlewares/verifyJWT.js";
@@ -35,6 +39,17 @@ router.post("/", authorize(tipoModelo, "create"), auditLogger(CREATE_RESERVATION
 // Actualizar reserva
 router.put("/:id", authorize(tipoModelo, "update"), auditLogger(UPDATE_RESERVATION), updateReserva);
 
+// Confirmar reserva
+router.put("/:id/confirmar", authorize(tipoModelo, "update"), auditLogger(UPDATE_RESERVATION), confirmarReserva);
+
+// Check-in
+router.put("/:id/checkin", authorize(tipoModelo, "update"), auditLogger(UPDATE_RESERVATION), checkinReserva);
+
+// Check-out
+router.put("/:id/checkout", authorize(tipoModelo, "update"), auditLogger(UPDATE_RESERVATION), checkoutReserva);
+
+// Cancelar reserva
+router.put("/:id/cancelar", authorize(tipoModelo, "update"), auditLogger(UPDATE_RESERVATION), cancelarReserva);
 
 // Eliminar reserva
 router.delete("/:id", authorize(tipoModelo, "delete"), auditLogger(DELETE_RESERVATION), deleteReserva);

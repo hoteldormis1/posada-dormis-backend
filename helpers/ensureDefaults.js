@@ -11,6 +11,7 @@ const sysadminPerms = {
     huesped: all,
     estadoReserva: all,
     auditoria: all,
+    huespedNoDeseado: all,
 };
 
 const adminPerms = {
@@ -21,6 +22,7 @@ const adminPerms = {
     huesped: all,
     estadoReserva: all,
     auditoria: { read: true, create: false, delete: false, update: false },
+    huespedNoDeseado: all,
 };
 
 const readerPerms = {
@@ -31,6 +33,7 @@ const readerPerms = {
     huesped: { read: true, create: false, delete: false, update: false },
     estadoReserva: { read: true, create: false, delete: false, update: false },
     auditoria: { read: true, create: false, delete: false, update: false },
+    huespedNoDeseado: { read: true, create: false, delete: false, update: false },
 };
 
 export async function ensureDefaultRoles() {
@@ -59,10 +62,13 @@ export async function ensureDefaultRoles() {
     ];
 
     for (const role of defaults) {
-        await TipoUsuario.findOrCreate({
+        const [record, created] = await TipoUsuario.findOrCreate({
             where: { nombre: role.nombre },
             defaults: role,
         });
+        if (!created) {
+            await record.update({ permisos: role.permisos });
+        }
     }
 }
 

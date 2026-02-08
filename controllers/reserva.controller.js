@@ -4,6 +4,7 @@ import { Huesped } from "../models/huesped.js";
 import { sequelize } from "../db.js";
 import { Op, QueryTypes } from "sequelize";
 import { TipoHabitacion } from "../models/tipoHabitacion.js";
+import { isDniBlacklisted } from "./huespedNoDeseado.controller.js";
 
 /**
  * Obtiene todas las reservas con información del huésped y habitación asociada.
@@ -15,7 +16,7 @@ import { TipoHabitacion } from "../models/tipoHabitacion.js";
 export const getAllReservas = async (req, res, next) => {
 	try {
 		const list = await Reserva.findAll({
-			include: ["Huesped", "Habitacion"],
+			include: ["Huesped", "Habitacion", "EstadoReserva"],
 		});
 
 		const reservasFormateadas = list.map((r) => ({
@@ -26,10 +27,12 @@ export const getAllReservas = async (req, res, next) => {
 			huespedNombre: r.Huesped ? `${r.Huesped.nombre} ${r.Huesped.apellido}` : "-",
 			telefonoHuesped: r.Huesped?.telefono ?? "-",
 			dniHuesped: r.Huesped?.dni ?? "-",
-			emailHuesped: r.Huesped?.email ?? "-",
 			montoPagado: r.montoPagado,
 			total: r.montoTotal,
-			estadoDeReserva: r.idEstadoReserva,
+			estadoDeReserva: r.EstadoReserva?.nombre
+				? r.EstadoReserva.nombre.charAt(0).toUpperCase() + r.EstadoReserva.nombre.slice(1)
+				: "-",
+			idEstadoReserva: r.idEstadoReserva,
 		}));
 
 		return res.json(reservasFormateadas);
@@ -320,7 +323,7 @@ export const getReservasCalendar2 = async (req, res, next) => {
  * 
  * @route POST /reservas
  * @body {number} [idHuesped] ID de huésped existente (si no se envía, se crea uno nuevo con datos en `huesped`).
- * @body {Object} [huesped] Datos del huésped a crear (dni, telefono, email, origen, nombre, apellido).
+ * @body {Object} [huesped] Datos del huésped a crear (dni, telefono, origen, nombre, apellido).
  * @body {number} idHabitacion ID de la habitación.
  * @body {number} idEstadoReserva ID del estado de la reserva.
  * @body {string} fechaDesde Fecha de inicio (YYYY-MM-DD).
@@ -385,9 +388,17 @@ export const createReserva = async (req, res, next) => {
 			});
 		}
 
-		// 1) Crear o validar huésped
+		// 1) Verificar lista negra y crear o validar huésped
+		const dniToCheck = huespedData?.dni || (idHuesped ? (await Huesped.findByPk(idHuesped))?.dni : null);
+		if (dniToCheck && await isDniBlacklisted(dniToCheck)) {
+			return res.status(403).json({
+				error: "Este huésped se encuentra en la lista de no deseados. No se puede crear la reserva.",
+				code: "DNI_BLACKLISTED",
+			});
+		}
+
 		if (!idHuesped) {
-			const required = ["dni", "telefono", "email", "origen", "nombre", "apellido"];
+			const required = ["dni", "telefono", "origen", "nombre", "apellido"];
 			const missing = required.filter((f) => !huespedData?.[f]);
 			if (missing.length) {
 				return res.status(400).json({ error: `Faltan datos para crear huésped: ${missing.join(", ")}` });
@@ -395,7 +406,6 @@ export const createReserva = async (req, res, next) => {
 			const nuevo = await Huesped.create({
 				dni: huespedData.dni,
 				telefono: huespedData.telefono,
-				email: huespedData.email,
 				origen: huespedData.origen,
 				nombre: huespedData.nombre,
 				apellido: huespedData.apellido,
@@ -437,7 +447,7 @@ export const createReserva = async (req, res, next) => {
 		const reservaCompleta = await Reserva.findByPk(nuevaReserva.idReserva, {
 			attributes: ["idReserva", "fechaDesde", "fechaHasta", "montoPagado", "montoTotal"],
 			include: [
-				{ model: Huesped, attributes: ["dni", "telefono", "email", "origen", "nombre", "apellido"] },
+				{ model: Huesped, attributes: ["dni", "telefono", "origen", "nombre", "apellido"] },
 				{ model: Habitacion, attributes: ["numero"], include: [{ model: TipoHabitacion, attributes: ["precio"] }] },
 			],
 		});
@@ -481,6 +491,187 @@ export const updateReserva = async (req, res, next) => {
 };
 
 /**
+ * Registra el check-in de una reserva.
+ * Solo reservas con estado "confirmada" pueden hacer check-in.
+ * 
+ * @route PUT /reservas/:id/checkin
+ */
+export const checkinReserva = async (req, res, next) => {
+	try {
+		const { EstadoReserva } = await import("../models/estadoReserva.js");
+
+		const reserva = await Reserva.findByPk(req.params.id, {
+			include: [{ model: EstadoReserva, attributes: ["nombre"] }],
+		});
+		if (!reserva) return res.status(404).json({ error: "Reserva no encontrada" });
+
+		const estadoActual = reserva.EstadoReserva?.nombre?.toLowerCase();
+		if (estadoActual !== "confirmada" && estadoActual !== "pendiente") {
+			return res.status(400).json({
+				error: `No se puede hacer check-in desde el estado "${reserva.EstadoReserva?.nombre || estadoActual}". La reserva debe estar confirmada o pendiente.`,
+			});
+		}
+
+		const estadoCheckin = await EstadoReserva.findOne({
+			where: { nombre: { [Op.iLike]: "checkin" } },
+		});
+		if (!estadoCheckin) {
+			return res.status(500).json({ error: "Estado 'checkin' no encontrado en el sistema" });
+		}
+
+		await reserva.update({ idEstadoReserva: estadoCheckin.idEstadoReserva });
+
+		const updated = await Reserva.findByPk(req.params.id, {
+			include: ["Huesped", "Habitacion", "EstadoReserva"],
+		});
+
+		return res.json({
+			message: "Check-in registrado correctamente",
+			reserva: updated,
+		});
+	} catch (err) {
+		console.error(`Error al registrar check-in ${req.params.id}:`, err);
+		return next(err);
+	}
+};
+
+/**
+ * Registra el check-out de una reserva.
+ * Solo reservas con estado "checkin" pueden hacer check-out.
+ * 
+ * @route PUT /reservas/:id/checkout
+ */
+export const checkoutReserva = async (req, res, next) => {
+	try {
+		const { EstadoReserva } = await import("../models/estadoReserva.js");
+
+		const reserva = await Reserva.findByPk(req.params.id, {
+			include: [{ model: EstadoReserva, attributes: ["nombre"] }],
+		});
+		if (!reserva) return res.status(404).json({ error: "Reserva no encontrada" });
+
+		const estadoActual = reserva.EstadoReserva?.nombre?.toLowerCase();
+		if (estadoActual !== "checkin") {
+			return res.status(400).json({
+				error: `No se puede hacer check-out desde el estado "${reserva.EstadoReserva?.nombre || estadoActual}". La reserva debe estar en check-in.`,
+			});
+		}
+
+		const estadoCheckout = await EstadoReserva.findOne({
+			where: { nombre: { [Op.iLike]: "checkout" } },
+		});
+		if (!estadoCheckout) {
+			return res.status(500).json({ error: "Estado 'checkout' no encontrado en el sistema" });
+		}
+
+		await reserva.update({ idEstadoReserva: estadoCheckout.idEstadoReserva });
+
+		const updated = await Reserva.findByPk(req.params.id, {
+			include: ["Huesped", "Habitacion", "EstadoReserva"],
+		});
+
+		return res.json({
+			message: "Check-out registrado correctamente",
+			reserva: updated,
+		});
+	} catch (err) {
+		console.error(`Error al registrar check-out ${req.params.id}:`, err);
+		return next(err);
+	}
+};
+
+/**
+ * Confirma una reserva pendiente.
+ * Solo reservas con estado "pendiente" pueden ser confirmadas.
+ *
+ * @route PUT /reservas/:id/confirmar
+ */
+export const confirmarReserva = async (req, res, next) => {
+	try {
+		const { EstadoReserva } = await import("../models/estadoReserva.js");
+
+		const reserva = await Reserva.findByPk(req.params.id, {
+			include: [{ model: EstadoReserva, attributes: ["nombre"] }],
+		});
+		if (!reserva) return res.status(404).json({ error: "Reserva no encontrada" });
+
+		const estadoActual = reserva.EstadoReserva?.nombre?.toLowerCase();
+		if (estadoActual !== "pendiente") {
+			return res.status(400).json({
+				error: `No se puede confirmar desde el estado "${reserva.EstadoReserva?.nombre || estadoActual}". La reserva debe estar pendiente.`,
+			});
+		}
+
+		const estadoConfirmada = await EstadoReserva.findOne({
+			where: { nombre: { [Op.iLike]: "confirmada" } },
+		});
+		if (!estadoConfirmada) {
+			return res.status(500).json({ error: "Estado 'confirmada' no encontrado en el sistema" });
+		}
+
+		await reserva.update({ idEstadoReserva: estadoConfirmada.idEstadoReserva });
+
+		const updated = await Reserva.findByPk(req.params.id, {
+			include: ["Huesped", "Habitacion", "EstadoReserva"],
+		});
+
+		return res.json({
+			message: "Reserva confirmada correctamente",
+			reserva: updated,
+		});
+	} catch (err) {
+		console.error(`Error al confirmar reserva ${req.params.id}:`, err);
+		return next(err);
+	}
+};
+
+/**
+ * Cancela una reserva.
+ * Se puede cancelar desde cualquier estado excepto checkout y cancelada.
+ *
+ * @route PUT /reservas/:id/cancelar
+ */
+export const cancelarReserva = async (req, res, next) => {
+	try {
+		const { EstadoReserva } = await import("../models/estadoReserva.js");
+
+		const reserva = await Reserva.findByPk(req.params.id, {
+			include: [{ model: EstadoReserva, attributes: ["nombre"] }],
+		});
+		if (!reserva) return res.status(404).json({ error: "Reserva no encontrada" });
+
+		const estadoActual = reserva.EstadoReserva?.nombre?.toLowerCase();
+		if (estadoActual === "cancelada") {
+			return res.status(400).json({ error: "La reserva ya está cancelada." });
+		}
+		if (estadoActual === "checkout") {
+			return res.status(400).json({ error: "No se puede cancelar una reserva que ya hizo check-out." });
+		}
+
+		const estadoCancelada = await EstadoReserva.findOne({
+			where: { nombre: { [Op.iLike]: "cancelada" } },
+		});
+		if (!estadoCancelada) {
+			return res.status(500).json({ error: "Estado 'cancelada' no encontrado en el sistema" });
+		}
+
+		await reserva.update({ idEstadoReserva: estadoCancelada.idEstadoReserva });
+
+		const updated = await Reserva.findByPk(req.params.id, {
+			include: ["Huesped", "Habitacion", "EstadoReserva"],
+		});
+
+		return res.json({
+			message: "Reserva cancelada correctamente",
+			reserva: updated,
+		});
+	} catch (err) {
+		console.error(`Error al cancelar reserva ${req.params.id}:`, err);
+		return next(err);
+	}
+};
+
+/**
  * Elimina una reserva existente por su ID.
  * 
  * @route DELETE /reservas/:id
@@ -504,7 +695,7 @@ export const deleteReserva = async (req, res, next) => {
  * Crea una reserva pública (sin autenticación). La reserva se crea con estado "pendiente".
  * 
  * @route POST /public/reservas
- * @body {Object} huesped Datos del huésped (dni, telefono, email, origen, nombre, apellido).
+ * @body {Object} huesped Datos del huésped (dni, telefono, origen, nombre, apellido).
  * @body {number} idHabitacion ID de la habitación.
  * @body {string} fechaDesde Fecha de inicio (YYYY-MM-DD).
  * @body {string} fechaHasta Fecha de fin (YYYY-MM-DD).
@@ -525,6 +716,14 @@ export const createReservaPublica = async (req, res, next) => {
 		if (missing.length) {
 			return res.status(400).json({
 				error: `Faltan datos del huésped: ${missing.join(", ")}`
+			});
+		}
+
+		// --- Verificar lista negra ---
+		if (await isDniBlacklisted(huespedData.dni)) {
+			return res.status(403).json({
+				error: "No es posible completar la reserva con los datos ingresados.",
+				code: "DNI_BLACKLISTED",
 			});
 		}
 
@@ -586,7 +785,6 @@ export const createReservaPublica = async (req, res, next) => {
 			huesped = await Huesped.create({
 				dni: huespedData.dni,
 				telefono: huespedData.telefono,
-				email: huespedData.email || null,
 				origen: huespedData.origen,
 				nombre: huespedData.nombre,
 				apellido: huespedData.apellido,
@@ -621,7 +819,7 @@ export const createReservaPublica = async (req, res, next) => {
 		const reservaCompleta = await Reserva.findByPk(nuevaReserva.idReserva, {
 			attributes: ["idReserva", "fechaDesde", "fechaHasta", "montoPagado", "montoTotal"],
 			include: [
-				{ model: Huesped, attributes: ["dni", "telefono", "email", "origen", "nombre", "apellido"] },
+				{ model: Huesped, attributes: ["dni", "telefono", "origen", "nombre", "apellido"] },
 				{
 					model: Habitacion,
 					attributes: ["numero"],
