@@ -1,7 +1,7 @@
 import { Router } from "express";
 import {
 	getAllReservas,
-	getReservasCalendar,
+	getPendingReservas,
 	createReserva,
 	updateReserva,
 	deleteReserva,
@@ -29,6 +29,9 @@ const tipoModelo = "reserva";
 
 // Listar reservas
 router.get("/", authorize(tipoModelo, "read"), getAllReservas);
+
+// Listar solo reservas pendientes (para panel de aprobaciones)
+router.get("/pendientes", authorize(tipoModelo, "read"), getPendingReservas);
 
 // Calendario de días completamente ocupados
 router.get("/calendar", authorize(tipoModelo, "read"), getReservasCalendar2);

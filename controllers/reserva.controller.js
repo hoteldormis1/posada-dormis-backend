@@ -5,6 +5,7 @@ import { sequelize } from "../db.js";
 import { Op, QueryTypes } from "sequelize";
 import { TipoHabitacion } from "../models/tipoHabitacion.js";
 import { isDniBlacklisted } from "./huespedNoDeseado.controller.js";
+import { enviarEmailAprobacion, enviarEmailRechazo } from "../helpers/reservaEmails.js";
 
 /**
  * Obtiene todas las reservas con información del huésped y habitación asociada.
@@ -12,6 +13,51 @@ import { isDniBlacklisted } from "./huespedNoDeseado.controller.js";
  * @route GET /reservas
  * @returns {Array<Object>} Lista de reservas formateadas con datos de habitación y huésped.
  */
+
+/**
+ * Obtiene solo las reservas con estado "pendiente".
+ *
+ * @route GET /reservas/pendientes
+ */
+export const getPendingReservas = async (req, res, next) => {
+	try {
+		const { EstadoReserva } = await import("../models/estadoReserva.js");
+
+		const estadoPendiente = await EstadoReserva.findOne({
+			where: { nombre: { [Op.iLike]: "pendiente" } },
+		});
+
+		if (!estadoPendiente) {
+			return res.json([]);
+		}
+
+		const list = await Reserva.findAll({
+			where: { idEstadoReserva: estadoPendiente.idEstadoReserva },
+			include: ["Huesped", "Habitacion", "EstadoReserva"],
+			order: [["fechaDesde", "ASC"]],
+		});
+
+		const reservas = list.map((r) => ({
+			id: r.idReserva,
+			numeroHab: r.Habitacion?.numero ?? "-",
+			ingreso: r.fechaDesde ? r.fechaDesde.toISOString().slice(0, 10) : "-",
+			egreso: r.fechaHasta ? r.fechaHasta.toISOString().slice(0, 10) : "-",
+			huespedNombre: r.Huesped ? `${r.Huesped.nombre} ${r.Huesped.apellido}` : "-",
+			telefonoHuesped: r.Huesped?.telefono ?? "-",
+			emailHuesped: r.Huesped?.email ?? null,
+			dniHuesped: r.Huesped?.dni ?? "-",
+			montoPagado: r.montoPagado,
+			total: r.montoTotal,
+			estadoDeReserva: "Pendiente",
+			idEstadoReserva: r.idEstadoReserva,
+		}));
+
+		return res.json(reservas);
+	} catch (err) {
+		console.error("Error al obtener reservas pendientes:", err);
+		return next(err);
+	}
+};
 
 export const getAllReservas = async (req, res, next) => {
 	try {
@@ -615,6 +661,23 @@ export const confirmarReserva = async (req, res, next) => {
 			include: ["Huesped", "Habitacion", "EstadoReserva"],
 		});
 
+		// Enviar email de aprobación si el huésped tiene email
+		if (updated?.Huesped?.email) {
+			try {
+				await enviarEmailAprobacion({
+					to: updated.Huesped.email,
+					nombreHuesped: `${updated.Huesped.nombre} ${updated.Huesped.apellido}`,
+					habitacion: updated.Habitacion?.numero ?? "-",
+					fechaDesde: updated.fechaDesde,
+					fechaHasta: updated.fechaHasta,
+					montoTotal: updated.montoTotal,
+				});
+			} catch (emailErr) {
+				console.error("Error al enviar email de aprobación:", emailErr);
+				// No falla la operación si el email no se envía
+			}
+		}
+
 		return res.json({
 			message: "Reserva confirmada correctamente",
 			reserva: updated,
@@ -655,11 +718,29 @@ export const cancelarReserva = async (req, res, next) => {
 			return res.status(500).json({ error: "Estado 'cancelada' no encontrado en el sistema" });
 		}
 
+		const eraPendiente = estadoActual === "pendiente";
+
 		await reserva.update({ idEstadoReserva: estadoCancelada.idEstadoReserva });
 
 		const updated = await Reserva.findByPk(req.params.id, {
 			include: ["Huesped", "Habitacion", "EstadoReserva"],
 		});
+
+		// Enviar email de rechazo solo si se cancela desde "pendiente" y el huésped tiene email
+		if (eraPendiente && updated?.Huesped?.email) {
+			try {
+				await enviarEmailRechazo({
+					to: updated.Huesped.email,
+					nombreHuesped: `${updated.Huesped.nombre} ${updated.Huesped.apellido}`,
+					habitacion: updated.Habitacion?.numero ?? "-",
+					fechaDesde: updated.fechaDesde,
+					fechaHasta: updated.fechaHasta,
+					motivo: req.body?.motivo || null,
+				});
+			} catch (emailErr) {
+				console.error("Error al enviar email de rechazo:", emailErr);
+			}
+		}
 
 		return res.json({
 			message: "Reserva cancelada correctamente",

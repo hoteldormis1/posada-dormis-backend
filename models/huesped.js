@@ -30,6 +30,10 @@ export const Huesped = sequelize.define(
 			type: DataTypes.STRING,
 			allowNull: false,
 		},
+		email: {
+			type: DataTypes.STRING,
+			allowNull: true,
+		},
 		direccion: {
 			type: DataTypes.STRING,
 			allowNull: true,
