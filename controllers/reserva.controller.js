@@ -16,7 +16,7 @@ import { isDniBlacklisted } from "./huespedNoDeseado.controller.js";
 export const getAllReservas = async (req, res, next) => {
 	try {
 		const list = await Reserva.findAll({
-			include: ["Huesped", "Habitacion"],
+			include: ["Huesped", "Habitacion", "EstadoReserva"],
 		});
 
 		const reservasFormateadas = list.map((r) => ({
@@ -29,7 +29,10 @@ export const getAllReservas = async (req, res, next) => {
 			dniHuesped: r.Huesped?.dni ?? "-",
 			montoPagado: r.montoPagado,
 			total: r.montoTotal,
-			estadoDeReserva: r.idEstadoReserva,
+			estadoDeReserva: r.EstadoReserva?.nombre
+				? r.EstadoReserva.nombre.charAt(0).toUpperCase() + r.EstadoReserva.nombre.slice(1)
+				: "-",
+			idEstadoReserva: r.idEstadoReserva,
 		}));
 
 		return res.json(reservasFormateadas);
