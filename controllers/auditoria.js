@@ -15,28 +15,21 @@ export const getAllAuditorias = async (req, res, next) => {
 		const limit = size;
 		const offset = (page - 1) * size;
 
-		// Solo auditorías de los últimos 30 días
-		const thirtyDaysAgo = new Date();
-		thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-		const whereCondition = {
-			fecha: { [Op.gte]: thirtyDaysAgo },
-			...(search
-				? {
-						[Op.or]: [
-							{ metodo: { [Op.like]: `%${search}%` } },
-							{ ruta: { [Op.like]: `%${search}%` } },
-							{ accion: { [Op.like]: `%${search}%` } },
-							Sequelize.where(Sequelize.col("Usuario.nombre"), {
-								[Op.like]: `%${search}%`,
-							}),
-							Sequelize.where(Sequelize.col("Usuario.email"), {
-								[Op.like]: `%${search}%`,
-							}),
-						],
-				  }
-				: {}),
-		};
+		const whereCondition = search
+			? {
+				[Op.or]: [
+					{ metodo: { [Op.like]: `%${search}%` } },
+					{ ruta: { [Op.like]: `%${search}%` } },
+					{ accion: { [Op.like]: `%${search}%` } },
+					Sequelize.where(Sequelize.col("Usuario.nombre"), {
+						[Op.like]: `%${search}%`,
+					}),
+					Sequelize.where(Sequelize.col("Usuario.email"), {
+						[Op.like]: `%${search}%`,
+					}),
+				],
+			}
+			: {};
 
 		const { count, rows } = await Auditoria.findAndCountAll({
 			where: whereCondition,
