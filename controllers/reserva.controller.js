@@ -503,9 +503,9 @@ export const checkinReserva = async (req, res, next) => {
 		if (!reserva) return res.status(404).json({ error: "Reserva no encontrada" });
 
 		const estadoActual = reserva.EstadoReserva?.nombre?.toLowerCase();
-		if (estadoActual !== "confirmada") {
+		if (estadoActual !== "confirmada" && estadoActual !== "pendiente") {
 			return res.status(400).json({
-				error: `No se puede hacer check-in desde el estado "${reserva.EstadoReserva?.nombre || estadoActual}". La reserva debe estar confirmada.`,
+				error: `No se puede hacer check-in desde el estado "${reserva.EstadoReserva?.nombre || estadoActual}". La reserva debe estar confirmada o pendiente.`,
 			});
 		}
 
@@ -573,6 +573,97 @@ export const checkoutReserva = async (req, res, next) => {
 		});
 	} catch (err) {
 		console.error(`Error al registrar check-out ${req.params.id}:`, err);
+		return next(err);
+	}
+};
+
+/**
+ * Confirma una reserva pendiente.
+ * Solo reservas con estado "pendiente" pueden ser confirmadas.
+ *
+ * @route PUT /reservas/:id/confirmar
+ */
+export const confirmarReserva = async (req, res, next) => {
+	try {
+		const { EstadoReserva } = await import("../models/estadoReserva.js");
+
+		const reserva = await Reserva.findByPk(req.params.id, {
+			include: [{ model: EstadoReserva, attributes: ["nombre"] }],
+		});
+		if (!reserva) return res.status(404).json({ error: "Reserva no encontrada" });
+
+		const estadoActual = reserva.EstadoReserva?.nombre?.toLowerCase();
+		if (estadoActual !== "pendiente") {
+			return res.status(400).json({
+				error: `No se puede confirmar desde el estado "${reserva.EstadoReserva?.nombre || estadoActual}". La reserva debe estar pendiente.`,
+			});
+		}
+
+		const estadoConfirmada = await EstadoReserva.findOne({
+			where: { nombre: { [Op.iLike]: "confirmada" } },
+		});
+		if (!estadoConfirmada) {
+			return res.status(500).json({ error: "Estado 'confirmada' no encontrado en el sistema" });
+		}
+
+		await reserva.update({ idEstadoReserva: estadoConfirmada.idEstadoReserva });
+
+		const updated = await Reserva.findByPk(req.params.id, {
+			include: ["Huesped", "Habitacion", "EstadoReserva"],
+		});
+
+		return res.json({
+			message: "Reserva confirmada correctamente",
+			reserva: updated,
+		});
+	} catch (err) {
+		console.error(`Error al confirmar reserva ${req.params.id}:`, err);
+		return next(err);
+	}
+};
+
+/**
+ * Cancela una reserva.
+ * Se puede cancelar desde cualquier estado excepto checkout y cancelada.
+ *
+ * @route PUT /reservas/:id/cancelar
+ */
+export const cancelarReserva = async (req, res, next) => {
+	try {
+		const { EstadoReserva } = await import("../models/estadoReserva.js");
+
+		const reserva = await Reserva.findByPk(req.params.id, {
+			include: [{ model: EstadoReserva, attributes: ["nombre"] }],
+		});
+		if (!reserva) return res.status(404).json({ error: "Reserva no encontrada" });
+
+		const estadoActual = reserva.EstadoReserva?.nombre?.toLowerCase();
+		if (estadoActual === "cancelada") {
+			return res.status(400).json({ error: "La reserva ya está cancelada." });
+		}
+		if (estadoActual === "checkout") {
+			return res.status(400).json({ error: "No se puede cancelar una reserva que ya hizo check-out." });
+		}
+
+		const estadoCancelada = await EstadoReserva.findOne({
+			where: { nombre: { [Op.iLike]: "cancelada" } },
+		});
+		if (!estadoCancelada) {
+			return res.status(500).json({ error: "Estado 'cancelada' no encontrado en el sistema" });
+		}
+
+		await reserva.update({ idEstadoReserva: estadoCancelada.idEstadoReserva });
+
+		const updated = await Reserva.findByPk(req.params.id, {
+			include: ["Huesped", "Habitacion", "EstadoReserva"],
+		});
+
+		return res.json({
+			message: "Reserva cancelada correctamente",
+			reserva: updated,
+		});
+	} catch (err) {
+		console.error(`Error al cancelar reserva ${req.params.id}:`, err);
 		return next(err);
 	}
 };
