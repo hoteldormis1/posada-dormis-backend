@@ -8,6 +8,7 @@ import { TipoHabitacion } from "./tipoHabitacion.js";
 import { Habitacion } from "./habitacion.js";
 import { Reserva } from "./reserva.js";
 import { Auditoria } from "./auditoria.js";
+import { HuespedNoDeseado } from "./huespedNoDeseado.js";
 
 export {
 	TipoUsuario,
@@ -17,5 +18,6 @@ export {
 	TipoHabitacion,
 	Habitacion,
 	Reserva,
-	Auditoria
+	Auditoria,
+	HuespedNoDeseado
 };

@@ -7,3 +7,4 @@ export * from "./tipoHabitacion.controller.js";
 export * from "./tipoUsuario.js";
 export * from "./usuario.controller.js";
 export * from "./dashboard.controller.js";
+export * from "./huespedNoDeseado.controller.js";
