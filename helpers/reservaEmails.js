@@ -1,24 +1,5 @@
 import { sendEmail } from "./mailer.js";
-
-/**
- * Genera el HTML base para emails de reserva.
- */
-function baseTemplate({ titulo, contenido, color }) {
-	return `
-	<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb; padding: 24px;">
-		<div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-			<div style="background: ${color}; padding: 24px 32px;">
-				<h1 style="color: white; margin: 0; font-size: 22px;">${titulo}</h1>
-			</div>
-			<div style="padding: 32px;">
-				${contenido}
-			</div>
-			<div style="padding: 16px 32px; background: #f3f4f6; text-align: center;">
-				<p style="margin: 0; color: #6b7280; font-size: 13px;">Posada Dormi's — Gracias por elegirnos</p>
-			</div>
-		</div>
-	</div>`;
-}
+import { baseTemplate } from "./emailTemplate.js";
 
 /**
  * Genera la tabla de detalle de reserva.
@@ -55,11 +36,11 @@ function detalleReserva({ habitacion, fechaDesde, fechaHasta, montoTotal }) {
 export async function enviarEmailAprobacion({ to, nombreHuesped, habitacion, fechaDesde, fechaHasta, montoTotal }) {
 	const html = baseTemplate({
 		titulo: "¡Reserva Confirmada!",
-		color: "#16a34a",
+		color: "#43AC6A",
 		contenido: `
 			<p style="font-size: 16px; color: #111827;">Hola <strong>${nombreHuesped}</strong>,</p>
 			<p style="font-size: 15px; color: #374151; line-height: 1.6;">
-				Tu reserva ha sido <strong style="color: #16a34a;">aprobada</strong>. Acá están los detalles:
+				Tu reserva ha sido <strong style="color: #43AC6A;">aprobada</strong>. Acá están los detalles:
 			</p>
 			${detalleReserva({ habitacion, fechaDesde, fechaHasta, montoTotal })}
 			<p style="font-size: 15px; color: #374151; line-height: 1.6;">
@@ -81,7 +62,7 @@ export async function enviarEmailAprobacion({ to, nombreHuesped, habitacion, fec
 export async function enviarEmailRechazo({ to, nombreHuesped, habitacion, fechaDesde, fechaHasta, motivo }) {
 	const html = baseTemplate({
 		titulo: "Reserva No Aprobada",
-		color: "#dc2626",
+		color: "#43AC6A",
 		contenido: `
 			<p style="font-size: 16px; color: #111827;">Hola <strong>${nombreHuesped}</strong>,</p>
 			<p style="font-size: 15px; color: #374151; line-height: 1.6;">
