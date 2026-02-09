@@ -17,18 +17,18 @@ export const getAllAuditorias = async (req, res, next) => {
 
 		const whereCondition = search
 			? {
-					[Op.or]: [
-						{ metodo: { [Op.like]: `%${search}%` } },
-						{ ruta: { [Op.like]: `%${search}%` } },
-						{ accion: { [Op.like]: `%${search}%` } },
-						Sequelize.where(Sequelize.col("Usuario.nombre"), {
-							[Op.like]: `%${search}%`,
-						}),
-						Sequelize.where(Sequelize.col("Usuario.email"), {
-							[Op.like]: `%${search}%`,
-						}),
-					],
-			  }
+				[Op.or]: [
+					{ metodo: { [Op.like]: `%${search}%` } },
+					{ ruta: { [Op.like]: `%${search}%` } },
+					{ accion: { [Op.like]: `%${search}%` } },
+					Sequelize.where(Sequelize.col("Usuario.nombre"), {
+						[Op.like]: `%${search}%`,
+					}),
+					Sequelize.where(Sequelize.col("Usuario.email"), {
+						[Op.like]: `%${search}%`,
+					}),
+				],
+			}
 			: {};
 
 		const { count, rows } = await Auditoria.findAndCountAll({
