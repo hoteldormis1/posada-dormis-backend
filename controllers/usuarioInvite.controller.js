@@ -3,6 +3,7 @@ import { TipoUsuario } from "../models/tipoUsuario.js";
 import crypto from "crypto";
 import bcrypt from "bcrypt";
 import { sendEmail } from "../helpers/mailer.js";
+import { baseTemplate } from "../helpers/emailTemplate.js";
 
 export async function inviteUsuario(req, res) {
     const { nombre, email, tipoUsuario } = req.body || {};
@@ -43,11 +44,27 @@ export async function inviteUsuario(req, res) {
         const verifyUrl = `${appBaseUrl}/verificarCuenta?code=${verifyToken}`;
         await sendEmail({
             to: email,
-            subject: "Invitación: verificá tu cuenta",
-            html: `<p>Hola ${nombre},</p>
-<p>El administrador te creó una cuenta. Para activarla y establecer tu contraseña, hacé click:</p>
-<p><a href="${verifyUrl}">${verifyUrl}</a></p>
-<p>El enlace vence en 24 horas.</p>`,
+            subject: "Invitación: verificá tu cuenta — Posada Dormi's",
+            html: baseTemplate({
+                titulo: "Activá tu cuenta",
+                color: "#43AC6A",
+                contenido: `
+                    <p style="font-size: 16px; color: #111827;">Hola <strong>${nombre}</strong>,</p>
+                    <p style="font-size: 15px; color: #374151; line-height: 1.6;">
+                        El administrador te creó una cuenta. Para activarla y establecer tu contraseña, hacé click en el siguiente botón:
+                    </p>
+                    <p style="margin: 24px 0; text-align: center;">
+                        <a href="${verifyUrl}"
+                           style="background-color: #43AC6A; color: white; padding: 12px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600; font-size: 15px;">
+                            Activar cuenta
+                        </a>
+                    </p>
+                    <p style="font-size: 13px; color: #6b7280; background: #f3f4f6; padding: 12px 16px; border-radius: 8px; word-break: break-all;">
+                        O copiá y pegá este enlace: ${verifyUrl}
+                    </p>
+                    <p style="font-size: 14px; color: #6b7280; margin-top: 16px;"><strong>El enlace vence en 24 horas.</strong></p>
+                `,
+            }),
         });
     } catch (err) {
         console.error("Error enviando invitación", err);
@@ -55,5 +72,3 @@ export async function inviteUsuario(req, res) {
 
     return res.json({ message: "Invitación enviada" });
 }
-
-

@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { Usuario } from "../models/usuario.js";
 import { TipoUsuario } from "../models/index.js";
 import { sendEmail } from "../helpers/mailer.js";
+import { baseTemplate } from "../helpers/emailTemplate.js";
 
 const ACCESS_SECRET = process.env.JWT_SECRET_ACCESS;
 const REFRESH_SECRET = process.env.JWT_SECRET_REFRESH;
@@ -41,26 +42,26 @@ export async function login(req, res) {
 			return res.status(401).json({ message: "Credenciales inválidas" });
 		}
 
-	const { refreshToken } = generateTokens(user.idUsuario); // solo refresh
+		const { refreshToken } = generateTokens(user.idUsuario); // solo refresh
 
-	// Primero limpiar cualquier cookie vieja
-	res.clearCookie(REFRESH_COOKIE_NAME, {
-		httpOnly: true,
-		secure: IS_PROD,
-		sameSite: IS_PROD ? "None" : "Lax",
-		path: REFRESH_COOKIE_PATH,
-	});
+		// Primero limpiar cualquier cookie vieja
+		res.clearCookie(REFRESH_COOKIE_NAME, {
+			httpOnly: true,
+			secure: IS_PROD,
+			sameSite: IS_PROD ? "None" : "Lax",
+			path: REFRESH_COOKIE_PATH,
+		});
 
-	// Luego setear la nueva cookie
-	res.cookie(REFRESH_COOKIE_NAME, refreshToken, {
-		httpOnly: true,
-		secure: IS_PROD, // requerido con SameSite=None
-		sameSite: IS_PROD ? "None" : "Lax", // Lax en dev, None en prod
-		path: REFRESH_COOKIE_PATH, // igual que en clearCookie
-		maxAge: parseTimeToMs(EXP_REFRESH),
-	});
+		// Luego setear la nueva cookie
+		res.cookie(REFRESH_COOKIE_NAME, refreshToken, {
+			httpOnly: true,
+			secure: IS_PROD, // requerido con SameSite=None
+			sameSite: IS_PROD ? "None" : "Lax", // Lax en dev, None en prod
+			path: REFRESH_COOKIE_PATH, // igual que en clearCookie
+			maxAge: parseTimeToMs(EXP_REFRESH),
+		});
 
-	return res.status(200).json({ message: "Login exitoso" });
+		return res.status(200).json({ message: "Login exitoso" });
 	} catch (err) {
 		console.error("Error en login:", err);
 		return res.status(500).json({ message: "Error interno del servidor" });
@@ -69,7 +70,7 @@ export async function login(req, res) {
 
 export function refresh(req, res) {
 	const token = req.cookies?.[REFRESH_COOKIE_NAME];
-	
+
 	if (!token) {
 		return res.status(401).json({ error: "Falta el token de acceso" });
 	}
@@ -84,7 +85,7 @@ export function refresh(req, res) {
 		return res.json({ accessToken });
 	} catch (err) {
 		console.error("Error en refresh token:", err.message);
-		
+
 		// Si el token es inválido, limpiar la cookie
 		res.clearCookie(REFRESH_COOKIE_NAME, {
 			httpOnly: true,
@@ -92,7 +93,7 @@ export function refresh(req, res) {
 			sameSite: IS_PROD ? "None" : "Lax",
 			path: REFRESH_COOKIE_PATH,
 		});
-		
+
 		return res.status(403).json({ message: "Token inválido o expirado" });
 	}
 }
@@ -146,11 +147,27 @@ export async function register(req, res) {
 			const verifyUrl = `${appBaseUrl}/verificarCuenta?code=${verifyToken}`;
 			await sendEmail({
 				to: email,
-				subject: "Verificá tu cuenta",
-				html: `<p>Hola ${nombre},</p>
-<p>Tu cuenta fue creada por el administrador. Para activarla y establecer tu contraseña, hacé click en el siguiente enlace:</p>
-<p><a href="${verifyUrl}">${verifyUrl}</a></p>
-<p>El enlace vence en 24 horas.</p>`,
+				subject: "Verificá tu cuenta — Posada Dormi's",
+				html: baseTemplate({
+					titulo: "Activá tu cuenta",
+					color: "#43AC6A",
+					contenido: `
+						<p style="font-size: 16px; color: #111827;">Hola <strong>${nombre}</strong>,</p>
+						<p style="font-size: 15px; color: #374151; line-height: 1.6;">
+							Tu cuenta fue creada por el administrador. Para activarla y establecer tu contraseña, hacé click en el siguiente botón:
+						</p>
+						<p style="margin: 24px 0; text-align: center;">
+							<a href="${verifyUrl}"
+							   style="background-color: #43AC6A; color: white; padding: 12px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600; font-size: 15px;">
+								Activar cuenta
+							</a>
+						</p>
+						<p style="font-size: 13px; color: #6b7280; background: #f3f4f6; padding: 12px 16px; border-radius: 8px; word-break: break-all;">
+							O copiá y pegá este enlace: ${verifyUrl}
+						</p>
+						<p style="font-size: 14px; color: #6b7280; margin-top: 16px;"><strong>El enlace vence en 24 horas.</strong></p>
+					`,
+				}),
 			});
 		} catch (mailErr) {
 			console.error("No se pudo enviar el email de verificación:", mailErr);
@@ -254,27 +271,27 @@ export async function requestPasswordReset(req, res) {
 
 			await sendEmail({
 				to: email,
-				subject: "Restablecimiento de contraseña",
-				html: `
-					<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-						<h2 style="color: #43AC6A;">Restablecimiento de contraseña</h2>
-						<p>Hola ${user.nombre},</p>
-						<p>Recibimos una solicitud para restablecer tu contraseña. Si no fuiste vos, podés ignorar este correo.</p>
-						<p>Para restablecer tu contraseña, hacé click en el siguiente enlace:</p>
-						<p style="margin: 20px 0;">
-							<a href="${resetUrl}" 
-							   style="background-color: #43AC6A; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
+				subject: "Restablecimiento de contraseña — Posada Dormi's",
+				html: baseTemplate({
+					titulo: "Restablecimiento de contraseña",
+					color: "#43AC6A",
+					contenido: `
+						<p style="font-size: 16px; color: #111827;">Hola <strong>${user.nombre}</strong>,</p>
+						<p style="font-size: 15px; color: #374151; line-height: 1.6;">
+							Recibimos una solicitud para restablecer tu contraseña. Si no fuiste vos, podés ignorar este correo.
+						</p>
+						<p style="margin: 24px 0; text-align: center;">
+							<a href="${resetUrl}"
+							   style="background-color: #43AC6A; color: white; padding: 12px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600; font-size: 15px;">
 								Restablecer contraseña
 							</a>
 						</p>
-						<p>O copiá y pegá este enlace en tu navegador:</p>
-						<p style="background-color: #f5f5f5; padding: 10px; border-radius: 5px; word-break: break-all;">
-							${resetUrl}
+						<p style="font-size: 13px; color: #6b7280; background: #f3f4f6; padding: 12px 16px; border-radius: 8px; word-break: break-all;">
+							O copiá y pegá este enlace: ${resetUrl}
 						</p>
-						<p><strong>Este enlace vence en 1 hora.</strong></p>
-						<p>Saludos,<br>El equipo de Dormis</p>
-					</div>
-				`,
+						<p style="font-size: 14px; color: #6b7280; margin-top: 16px;"><strong>Este enlace vence en 1 hora.</strong></p>
+					`,
+				}),
 			});
 		} catch (mailErr) {
 			console.error("Error al enviar email de reseteo:", mailErr);
@@ -312,7 +329,7 @@ export async function verifyResetToken(req, res) {
 	try {
 		// Limpiar el token de espacios en blanco
 		const cleanToken = token.trim();
-		
+
 		const user = await Usuario.findOne({ where: { resetToken: cleanToken } });
 
 		if (!user) {
@@ -355,7 +372,7 @@ export async function resetPassword(req, res) {
 	try {
 		// Limpiar el token de espacios en blanco
 		const cleanToken = token.trim();
-		
+
 		const user = await Usuario.findOne({ where: { resetToken: cleanToken } });
 
 		if (!user) {
@@ -387,16 +404,20 @@ export async function resetPassword(req, res) {
 		try {
 			await sendEmail({
 				to: user.email,
-				subject: "Contraseña restablecida exitosamente",
-				html: `
-					<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-						<h2 style="color: #43AC6A;">Contraseña actualizada</h2>
-						<p>Hola ${user.nombre},</p>
-						<p>Tu contraseña fue restablecida exitosamente.</p>
-						<p>Si no fuiste vos quien realizó este cambio, por favor contactanos inmediatamente.</p>
-						<p>Saludos,<br>El equipo de Dormis</p>
-					</div>
-				`,
+				subject: "Contraseña restablecida — Posada Dormi's",
+				html: baseTemplate({
+					titulo: "Contraseña actualizada",
+					color: "#43AC6A",
+					contenido: `
+						<p style="font-size: 16px; color: #111827;">Hola <strong>${user.nombre}</strong>,</p>
+						<p style="font-size: 15px; color: #374151; line-height: 1.6;">
+							Tu contraseña fue restablecida exitosamente. Ya podés iniciar sesión con tu nueva contraseña.
+						</p>
+						<p style="font-size: 14px; color: #6b7280; background: #fef2f2; padding: 12px 16px; border-radius: 8px; margin-top: 16px;">
+							Si no fuiste vos quien realizó este cambio, por favor contactanos inmediatamente.
+						</p>
+					`,
+				}),
 			});
 		} catch (mailErr) {
 			console.error("Error al enviar email de confirmación:", mailErr);
