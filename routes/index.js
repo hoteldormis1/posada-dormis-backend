@@ -11,6 +11,7 @@ import auditoriasRouter from "./auditoria.routes.js";
 import dashboardRouter from "./dashboard.routes.js";
 import publicRouter from "./public.routes.js";
 import huespedNoDeseadoRouter from "./huespedNoDeseado.routes.js";
+import contableRouter from "./contable.routes.js";
 import { verifyJWT } from "../middlewares/verifyJWT.js";
 
 const router = express.Router();
@@ -35,5 +36,6 @@ router.use("/estadoReserva", estadoReservaRouter);
 router.use("/auditorias", auditoriasRouter);
 router.use("/dashboards", dashboardRouter);
 router.use("/huespedes-no-deseados", huespedNoDeseadoRouter);
+router.use("/contable", contableRouter);
 
 export default router;
