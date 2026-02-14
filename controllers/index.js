@@ -8,3 +8,4 @@ export * from "./tipoUsuario.js";
 export * from "./usuario.controller.js";
 export * from "./dashboard.controller.js";
 export * from "./huespedNoDeseado.controller.js";
+export * from "./contable.controller.js";
