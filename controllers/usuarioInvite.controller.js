@@ -40,7 +40,7 @@ export async function inviteUsuario(req, res) {
     }
 
     try {
-        const appBaseUrl = process.env.APP_BASE_URL || "http://localhost:3000";
+        const appBaseUrl = process.env.URL;
         const verifyUrl = `${appBaseUrl}/verificarCuenta?code=${verifyToken}`;
         await sendEmail({
             to: email,
