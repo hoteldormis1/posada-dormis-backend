@@ -143,7 +143,7 @@ export async function register(req, res) {
 
 		// Enviar email de verificación (no bloquear respuesta si falla)
 		try {
-			const appBaseUrl = process.env.APP_BASE_URL || "http://localhost:3000";
+			const appBaseUrl = process.env.URL;
 			const verifyUrl = `${appBaseUrl}/verificarCuenta?code=${verifyToken}`;
 			await sendEmail({
 				to: email,
@@ -266,7 +266,7 @@ export async function requestPasswordReset(req, res) {
 
 		// Enviar email
 		try {
-			const appBaseUrl = process.env.APP_BASE_URL || "http://localhost:3000";
+			const appBaseUrl = process.env.URL;
 			const resetUrl = `${appBaseUrl}/resetPassword?token=${encodeURIComponent(resetToken)}`;
 
 			await sendEmail({
