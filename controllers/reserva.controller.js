@@ -6,6 +6,7 @@ import { Op, QueryTypes } from "sequelize";
 import { TipoHabitacion } from "../models/tipoHabitacion.js";
 import { isDniBlacklisted } from "./huespedNoDeseado.controller.js";
 import { enviarEmailAprobacion, enviarEmailRechazo } from "../helpers/reservaEmails.js";
+import { broadcast } from "../ws.js";
 
 /**
  * Obtiene todas las reservas con información del huésped y habitación asociada.
@@ -184,7 +185,7 @@ export const getReservasCalendar = async (req, res, next) => {
         to_char(date_trunc('day', r."fechaDesde"), 'YYYY-MM-DD') AS "start",
         to_char(date_trunc('day', r."fechaHasta"), 'YYYY-MM-DD') AS "end",
         COALESCE(hp."nombre", '') AS "guest",
-        COALESCE(r."montoPagado", 0) AS "montoPagado",
+        r."montoTotal" AS "montoTotal",
         r."montoPagado" AS "montoPagado",
         LOWER(er."nombre") AS "status"
       FROM "Reserva" r
@@ -590,6 +591,11 @@ export const confirmarReserva = async (req, res, next) => {
 			}
 		}
 
+		broadcast("reserva_actualizada", {
+			id: Number(req.params.id),
+			estado: "confirmada",
+		});
+
 		return res.json({
 			message: "Reserva confirmada correctamente",
 			reserva: updated,
@@ -653,6 +659,11 @@ export const cancelarReserva = async (req, res, next) => {
 				console.error("Error al enviar email de rechazo:", emailErr);
 			}
 		}
+
+		broadcast("reserva_actualizada", {
+			id: Number(req.params.id),
+			estado: "cancelada",
+		});
 
 		return res.json({
 			message: "Reserva cancelada correctamente",
@@ -819,6 +830,14 @@ export const createReservaPublica = async (req, res, next) => {
 					include: [{ model: TipoHabitacion, attributes: ["precio", "nombre"] }]
 				},
 			],
+		});
+
+		broadcast("nueva_reserva", {
+			id: nuevaReserva.idReserva,
+			habitacion: reservaCompleta?.Habitacion?.numero ?? null,
+			huesped: reservaCompleta?.Huesped
+				? `${reservaCompleta.Huesped.nombre} ${reservaCompleta.Huesped.apellido}`
+				: null,
 		});
 
 		return res.status(201).json({

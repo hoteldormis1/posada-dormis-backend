@@ -1,4 +1,5 @@
 // index.js
+import http from "http";
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
@@ -11,9 +12,11 @@ import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import { ensureDefaultReservaStates, ensureDefaultRoles } from "./helpers/ensureDefaults.js";
+import { initWss } from "./ws.js";
 
 dotenv.config();
 const app = express();
+const httpServer = http.createServer(app);
 
 app.set('trust proxy', 1);
 
@@ -62,8 +65,10 @@ const startServer = async () => {
 	await ensureDefaultRoles();
 	await ensureDefaultReservaStates();
 
-	app.listen(port, () => {
-		console.log(`🚀 Servidor corriendo en http://localhost:${port}`);
+	initWss(httpServer);
+
+	httpServer.listen(port, () => {
+		console.log(`🚀 Servidor corriendo en ${process.env.URL}`);
 		if (process.env.NODE_ENV !== "production") {
 			console.log(`📚 Swagger UI en ${process.env.URL}/api-docs`);
 		}
