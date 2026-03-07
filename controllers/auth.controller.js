@@ -1,3 +1,4 @@
+import "dotenv/config";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
@@ -14,6 +15,11 @@ const EXP_REFRESH = process.env.JWT_EXPIRATION_REFRESH || "1d";
 const IS_PROD = process.env.NODE_ENV === "production";
 const REFRESH_COOKIE_NAME = "refreshToken";
 const REFRESH_COOKIE_PATH = "/api/auth";
+
+// Leído en runtime (no como constante de módulo) para evitar que ESM
+// evalúe esto antes de que dotenv.config() cargue el .env
+const getFrontendUrl = () =>
+	process.env.FRONTEND_URL;
 
 export function generateTokens(userId) {
 	const accessToken = jwt.sign({ userId }, ACCESS_SECRET, {
@@ -143,8 +149,7 @@ export async function register(req, res) {
 
 		// Enviar email de verificación (no bloquear respuesta si falla)
 		try {
-			const appBaseUrl = process.env.URL;
-			const verifyUrl = `${appBaseUrl}/verificarCuenta?code=${verifyToken}`;
+			const verifyUrl = `${getFrontendUrl()}/verificarCuenta?code=${verifyToken}`;
 			await sendEmail({
 				to: email,
 				subject: "Verificá tu cuenta — Posada Dormi's",
@@ -266,8 +271,7 @@ export async function requestPasswordReset(req, res) {
 
 		// Enviar email
 		try {
-			const appBaseUrl = process.env.URL;
-			const resetUrl = `${appBaseUrl}/resetPassword?token=${encodeURIComponent(resetToken)}`;
+			const resetUrl = `${getFrontendUrl()}/resetPassword?token=${encodeURIComponent(resetToken)}`;
 
 			await sendEmail({
 				to: email,

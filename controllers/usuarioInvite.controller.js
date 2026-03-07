@@ -1,9 +1,13 @@
+import "dotenv/config";
 import { Usuario } from "../models/usuario.js";
 import { TipoUsuario } from "../models/tipoUsuario.js";
 import crypto from "crypto";
 import bcrypt from "bcrypt";
 import { sendEmail } from "../helpers/mailer.js";
 import { baseTemplate } from "../helpers/emailTemplate.js";
+
+const getFrontendUrl = () =>
+    process.env.FRONTEND_URL;
 
 export async function inviteUsuario(req, res) {
     const { nombre, email, tipoUsuario } = req.body || {};
@@ -40,8 +44,7 @@ export async function inviteUsuario(req, res) {
     }
 
     try {
-        const appBaseUrl = process.env.URL;
-        const verifyUrl = `${appBaseUrl}/verificarCuenta?code=${verifyToken}`;
+        const verifyUrl = `${getFrontendUrl()}/verificarCuenta?code=${verifyToken}`;
         await sendEmail({
             to: email,
             subject: "Invitación: verificá tu cuenta — Posada Dormi's",

@@ -19,7 +19,8 @@ const tipoModelo = "usuario";
 
 router.get("/", authorize(tipoModelo, "read"), getAllUsuarios);
 
-router.get("/me", authorize(tipoModelo, "read"), getCurrentUsuario);
+// Perfil propio: solo requiere token válido, no permiso de módulo "usuario"
+router.get("/me", getCurrentUsuario);
 
 // Invitar usuario (crea o regenera token y envía mail)
 router.post("/invite", authorize(tipoModelo, "create"), inviteUsuario);
