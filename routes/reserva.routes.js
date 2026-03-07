@@ -10,6 +10,7 @@ import {
 	checkoutReserva,
 	confirmarReserva,
 	cancelarReserva,
+	setEstadoReserva,
 } from "../controllers/index.js";
 import { auditLogger } from "../middlewares/auditLogger.js";
 import { verifyJWT } from "../middlewares/verifyJWT.js";
@@ -53,6 +54,9 @@ router.put("/:id/checkout", authorize(tipoModelo, "update"), auditLogger(UPDATE_
 
 // Cancelar reserva
 router.put("/:id/cancelar", authorize(tipoModelo, "update"), auditLogger(UPDATE_RESERVATION), cancelarReserva);
+
+// Cambiar estado sin restricciones de transición (slider)
+router.put("/:id/estado", authorize(tipoModelo, "update"), auditLogger(UPDATE_RESERVATION), setEstadoReserva);
 
 // Eliminar reserva
 router.delete("/:id", authorize(tipoModelo, "delete"), auditLogger(DELETE_RESERVATION), deleteReserva);

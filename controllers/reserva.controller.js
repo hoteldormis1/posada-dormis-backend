@@ -834,3 +834,29 @@ export const createReservaPublica = async (req, res, next) => {
 		return next(err);
 	}
 };
+
+/**
+ * Cambia el estado de una reserva a cualquier estado por nombre (sin validaciones de transición).
+ * @route PUT /reservas/:id/estado
+ * @body {string} nombre - nombre del estado destino
+ */
+export const setEstadoReserva = async (req, res, next) => {
+	try {
+		const { nombre } = req.body;
+		if (!nombre) return res.status(400).json({ error: "Falta el campo 'nombre' del estado." });
+
+		const reserva = await Reserva.findByPk(req.params.id);
+		if (!reserva) return res.status(404).json({ error: "Reserva no encontrada." });
+
+		const { EstadoReserva } = await import("../models/estadoReserva.js");
+		const estado = await EstadoReserva.findOne({ where: { nombre: { [Op.iLike]: nombre } } });
+		if (!estado) return res.status(400).json({ error: `Estado '${nombre}' no encontrado.` });
+
+		await reserva.update({ idEstadoReserva: estado.idEstadoReserva });
+
+		return res.json({ id: reserva.idReserva, estado: estado.nombre });
+	} catch (err) {
+		console.error("Error al cambiar estado de reserva:", err);
+		return next(err);
+	}
+};
