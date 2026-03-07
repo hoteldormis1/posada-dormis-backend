@@ -5,7 +5,7 @@ import {
 	createReserva,
 	updateReserva,
 	deleteReserva,
-	getReservasCalendar2,
+	getReservasCalendar,
 	checkinReserva,
 	checkoutReserva,
 	confirmarReserva,
@@ -34,7 +34,7 @@ router.get("/", authorize(tipoModelo, "read"), getAllReservas);
 router.get("/pendientes", authorize(tipoModelo, "read"), getPendingReservas);
 
 // Calendario de días completamente ocupados
-router.get("/calendar", authorize(tipoModelo, "read"), getReservasCalendar2);
+router.get("/calendar", authorize(tipoModelo, "read"), getReservasCalendar);
 
 // Crear reserva
 router.post("/", authorize(tipoModelo, "create"), auditLogger(CREATE_RESERVATION), createReserva);

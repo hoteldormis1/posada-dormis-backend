@@ -81,105 +81,11 @@ export const getAllReservas = async (req, res, next) => {
 			idEstadoReserva: r.idEstadoReserva,
 		}));
 
+		console.log("💚", reservasFormateadas);
+
 		return res.json(reservasFormateadas);
 	} catch (err) {
 		console.error("Error al obtener reservas:", err);
-		return next(err);
-	}
-};
-
-/**
- * Obtiene las fechas en las que todas las habitaciones seleccionadas están completamente ocupadas.
- *
- * @route GET /reservas/calendar
- * @query {string|number|Array} [habitacionesIds] IDs de habitaciones a filtrar (puede ser lista separada por comas, número o array).
- * @returns {Object} Objeto con la propiedad `fullyBookedDates` que contiene un array de strings (YYYY-MM-DD) con las fechas donde todas las habitaciones filtradas están ocupadas.
- */
-
-export const getReservasCalendar = async (req, res, next) => {
-	try {
-		const today = new Date();
-		const startDate = new Date(today.getFullYear(), today.getMonth(), 1)
-			.toISOString().slice(0, 10);
-		const endDate = new Date(today.getFullYear(), today.getMonth() + 4, 0)
-			.toISOString().slice(0, 10);
-
-		// ---- parseo robusto de IDs ----
-		const parseIds = (val) => {
-			if (!val) return [];
-			if (Array.isArray(val)) {
-				return val.flatMap(v => String(v).split(","))
-					.map(v => Number(v))
-					.filter(Number.isFinite);
-			}
-			if (typeof val === "string") {
-				return val.split(",").map(v => Number(v)).filter(Number.isFinite);
-			}
-			if (typeof val === "number" && Number.isFinite(val)) return [val];
-			return [];
-		};
-
-		const ids = Array.from(new Set([
-			...parseIds(req?.query?.habitacionesIds),
-		]));
-
-		const usarFiltro = ids.length > 0;
-
-		// ---- 1) contar habitaciones del universo a evaluar (raw SQL) ----
-		const countSql = `
-      SELECT COUNT(*)::int AS total
-      FROM "Habitacion"
-      ${usarFiltro ? 'WHERE "Habitacion"."idHabitacion" IN (:ids)' : ''};
-    `;
-		const countRows = await sequelize.query(countSql, {
-			type: QueryTypes.SELECT,
-			replacements: usarFiltro ? { ids } : {},
-			// logging: console.log,
-		});
-		const totalSubset = countRows?.[0]?.total ?? 0;
-
-		// Si no hay habitaciones en el subset, no puede haber días completos
-		if (!totalSubset) {
-			return res.json({ fullyBookedDates: [] });
-		}
-
-		// ---- 2) query de calendario (raw SQL) ----
-		const filtroHabitaciones = usarFiltro ? 'AND r."idHabitacion" IN (:ids)' : '';
-
-		const calendarSql = `
-      SELECT to_char(d.day, 'YYYY-MM-DD') AS date
-      FROM generate_series(:startDate::date, :endDate::date, '1 day') AS d(day)
-      LEFT JOIN "Reserva" r
-        ON r."fechaDesde" < (:endDate::date + INTERVAL '1 day')
-       AND r."fechaHasta" > :startDate::date
-       AND d.day BETWEEN date_trunc('day', r."fechaDesde") AND date_trunc('day', r."fechaHasta")
-       ${filtroHabitaciones}
-      GROUP BY d.day
-      HAVING COUNT(DISTINCT r."idHabitacion") = :totalSubset
-      ORDER BY d.day;
-    `;
-
-		const rows = await sequelize.query(calendarSql, {
-			type: QueryTypes.SELECT,
-			replacements: {
-				startDate,
-				endDate,
-				totalSubset,
-				...(usarFiltro ? { ids } : {}),
-			},
-			// logging: console.log,
-		});
-
-		const fullyBookedDates = rows.map(r => r.date);
-		return res.json({ fullyBookedDates });
-	} catch (err) {
-		console.error("Error al calcular calendario:", {
-			message: err?.message,
-			detail: err?.original?.detail || err?.parent?.detail,
-			sql: err?.sql,
-			parameters: err?.parameters,
-			stack: err?.stack,
-		});
 		return next(err);
 	}
 };
@@ -193,7 +99,7 @@ export const getReservasCalendar = async (req, res, next) => {
  *  - includedStatuses=confirmada,checkin (opcional; si viene, ignora excludedStatuses)
  *  - excludedStatuses=cancelada,anulada  (opcional; default: ["cancelada","canceled","anulada","void"])
  */
-export const getReservasCalendar2 = async (req, res, next) => {
+export const getReservasCalendar = async (req, res, next) => {
 	try {
 		const toYMD = (d) => new Date(d).toISOString().slice(0, 10);
 		const today = new Date();
@@ -278,7 +184,8 @@ export const getReservasCalendar2 = async (req, res, next) => {
         to_char(date_trunc('day', r."fechaDesde"), 'YYYY-MM-DD') AS "start",
         to_char(date_trunc('day', r."fechaHasta"), 'YYYY-MM-DD') AS "end",
         COALESCE(hp."nombre", '') AS "guest",
-        r."montoTotal" AS "price",
+        COALESCE(r."montoPagado", 0) AS "montoPagado",
+        r."montoPagado" AS "montoPagado",
         LOWER(er."nombre") AS "status"
       FROM "Reserva" r
       JOIN "Habitacion" h ON h."idHabitacion" = r."idHabitacion"
@@ -288,7 +195,7 @@ export const getReservasCalendar2 = async (req, res, next) => {
       ${usarFiltroHabit ? 'AND h."numero" IN (:numeros)' : ''}
       ORDER BY r."fechaDesde", r."idReserva";
     `;
-		const bookings = await sequelize.query(bookingsSql, {
+		const rawBookings = await sequelize.query(bookingsSql, {
 			type: QueryTypes.SELECT,
 			replacements: {
 				startDate,
@@ -297,6 +204,11 @@ export const getReservasCalendar2 = async (req, res, next) => {
 				...estadoRepl,
 			},
 		});
+
+		// Normalizamos keys/casting para garantizar que montoPagado siempre viaje al frontend
+		const bookings = (rawBookings || []).map((b) => ({
+			...b,
+		}));
 
 		// ========== BY-DATE ==========
 		const byDateSql = `

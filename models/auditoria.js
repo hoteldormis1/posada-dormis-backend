@@ -47,6 +47,12 @@ export const Auditoria = sequelize.define(
 	}
 );
 
-Auditoria.belongsTo(Usuario, { foreignKey: "idUsuario" });
+Auditoria.belongsTo(Usuario, {
+	foreignKey: "idUsuario",
+	constraints: false,
+});
 
-Usuario.hasMany(Auditoria, { foreignKey: "idUsuario" });
+Usuario.hasMany(Auditoria, {
+	foreignKey: "idUsuario",
+	constraints: false,
+});
