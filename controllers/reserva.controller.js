@@ -128,7 +128,7 @@ export const getReservasCalendar = async (req, res, next) => {
 		const excludedStatuses = !includedStatuses
 			? (req.query.excludedStatuses
 				? String(req.query.excludedStatuses).split(",").map(s => s.trim().toLowerCase()).filter(Boolean)
-				: ["cancelada", "canceled", "anulada", "void"])
+				: ["cancelada", "canceled", "anulada", "void", "rechazada"])
 			: [];
 
 		// ========== ROOMS ==========
@@ -671,6 +671,73 @@ export const cancelarReserva = async (req, res, next) => {
 		});
 	} catch (err) {
 		console.error(`Error al cancelar reserva ${req.params.id}:`, err);
+		return next(err);
+	}
+};
+
+/**
+ * Rechaza una reserva pendiente (acción administrativa).
+ * Solo aplica desde el estado "pendiente".
+ * Envía email de rechazo al huésped si tiene email registrado.
+ *
+ * @route PUT /reservas/:id/rechazar
+ */
+export const rechazarReserva = async (req, res, next) => {
+	try {
+		const { EstadoReserva } = await import("../models/estadoReserva.js");
+
+		const reserva = await Reserva.findByPk(req.params.id, {
+			include: [{ model: EstadoReserva, attributes: ["nombre"] }],
+		});
+		if (!reserva) return res.status(404).json({ error: "Reserva no encontrada" });
+
+		const estadoActual = reserva.EstadoReserva?.nombre?.toLowerCase();
+		if (estadoActual !== "pendiente") {
+			return res.status(400).json({
+				error: `Solo se pueden rechazar reservas pendientes. Estado actual: "${reserva.EstadoReserva?.nombre || estadoActual}".`,
+			});
+		}
+
+		const estadoRechazada = await EstadoReserva.findOne({
+			where: { nombre: { [Op.iLike]: "rechazada" } },
+		});
+		if (!estadoRechazada) {
+			return res.status(500).json({ error: "Estado 'rechazada' no encontrado en el sistema" });
+		}
+
+		await reserva.update({ idEstadoReserva: estadoRechazada.idEstadoReserva });
+
+		const updated = await Reserva.findByPk(req.params.id, {
+			include: ["Huesped", "Habitacion", "EstadoReserva"],
+		});
+
+		// Enviar email de rechazo si el huésped tiene email
+		if (updated?.Huesped?.email) {
+			try {
+				await enviarEmailRechazo({
+					to: updated.Huesped.email,
+					nombreHuesped: `${updated.Huesped.nombre} ${updated.Huesped.apellido}`,
+					habitacion: updated.Habitacion?.numero ?? "-",
+					fechaDesde: updated.fechaDesde,
+					fechaHasta: updated.fechaHasta,
+					motivo: req.body?.motivo || null,
+				});
+			} catch (emailErr) {
+				console.error("Error al enviar email de rechazo:", emailErr);
+			}
+		}
+
+		broadcast("reserva_actualizada", {
+			id: Number(req.params.id),
+			estado: "rechazada",
+		});
+
+		return res.json({
+			message: "Reserva rechazada correctamente",
+			reserva: updated,
+		});
+	} catch (err) {
+		console.error(`Error al rechazar reserva ${req.params.id}:`, err);
 		return next(err);
 	}
 };

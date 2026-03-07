@@ -79,6 +79,7 @@ export async function ensureDefaultReservaStates() {
         { nombre: "checkin", descripcion: "Huésped ingresó (estancia en curso)", prioridad: 80 },
         { nombre: "checkout", descripcion: "Estadía finalizada (salida realizada)", prioridad: 70 },
         { nombre: "cancelada", descripcion: "Reserva anulada antes del inicio", prioridad: 60 },
+        { nombre: "rechazada", descripcion: "Reserva rechazada por administración desde estado pendiente", prioridad: 55 },
         //{ nombre: "no_show", descripcion: "Huésped no se presentó", prioridad: 50 },
     ];
 

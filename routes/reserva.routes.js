@@ -10,6 +10,7 @@ import {
 	checkoutReserva,
 	confirmarReserva,
 	cancelarReserva,
+	rechazarReserva,
 	setEstadoReserva,
 } from "../controllers/index.js";
 import { auditLogger } from "../middlewares/auditLogger.js";
@@ -54,6 +55,9 @@ router.put("/:id/checkout", authorize(tipoModelo, "update"), auditLogger(UPDATE_
 
 // Cancelar reserva
 router.put("/:id/cancelar", authorize(tipoModelo, "update"), auditLogger(UPDATE_RESERVATION), cancelarReserva);
+
+// Rechazar reserva pendiente (acción administrativa)
+router.put("/:id/rechazar", authorize(tipoModelo, "update"), auditLogger(UPDATE_RESERVATION), rechazarReserva);
 
 // Cambiar estado sin restricciones de transición (slider)
 router.put("/:id/estado", authorize(tipoModelo, "update"), auditLogger(UPDATE_RESERVATION), setEstadoReserva);
