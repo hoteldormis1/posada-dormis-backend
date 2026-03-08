@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getContableResumen, getContableExportar } from "../controllers/index.js";
+import { getContableResumen, getContableExportar, getContableOcupacion } from "../controllers/index.js";
 
 const router = Router();
 
@@ -14,5 +14,11 @@ router.get('/resumen', getContableResumen);
  * Listado detallado de reservas para exportar.
  */
 router.get('/exportar', getContableExportar);
+
+/**
+ * GET /api/contable/ocupacion?from=YYYY-MM-DD&to=YYYY-MM-DD
+ * Ocupación de habitaciones día a día.
+ */
+router.get('/ocupacion', getContableOcupacion);
 
 export default router;

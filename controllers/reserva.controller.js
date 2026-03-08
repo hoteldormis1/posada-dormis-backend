@@ -5,7 +5,19 @@ import { sequelize } from "../db.js";
 import { Op, QueryTypes } from "sequelize";
 import { TipoHabitacion } from "../models/tipoHabitacion.js";
 import { isDniBlacklisted } from "./huespedNoDeseado.controller.js";
-import { enviarEmailAprobacion, enviarEmailRechazo } from "../helpers/reservaEmails.js";
+import {
+	enviarEmailAprobacion,
+	enviarEmailRechazo,
+	enviarEmailCancelacion,
+	enviarEmailNuevaSolicitudPosada,
+	enviarEmailConfirmacionIdentidad,
+} from "../helpers/reservaEmails.js";
+import { broadcast } from "../ws.js";
+import {
+	guardarPendiente,
+	obtenerPendiente,
+	eliminarPendiente,
+} from "../helpers/pendingReservations.js";
 
 /**
  * Obtiene todas las reservas con información del huésped y habitación asociada.
@@ -89,102 +101,6 @@ export const getAllReservas = async (req, res, next) => {
 };
 
 /**
- * Obtiene las fechas en las que todas las habitaciones seleccionadas están completamente ocupadas.
- *
- * @route GET /reservas/calendar
- * @query {string|number|Array} [habitacionesIds] IDs de habitaciones a filtrar (puede ser lista separada por comas, número o array).
- * @returns {Object} Objeto con la propiedad `fullyBookedDates` que contiene un array de strings (YYYY-MM-DD) con las fechas donde todas las habitaciones filtradas están ocupadas.
- */
-
-export const getReservasCalendar = async (req, res, next) => {
-	try {
-		const today = new Date();
-		const startDate = new Date(today.getFullYear(), today.getMonth(), 1)
-			.toISOString().slice(0, 10);
-		const endDate = new Date(today.getFullYear(), today.getMonth() + 4, 0)
-			.toISOString().slice(0, 10);
-
-		// ---- parseo robusto de IDs ----
-		const parseIds = (val) => {
-			if (!val) return [];
-			if (Array.isArray(val)) {
-				return val.flatMap(v => String(v).split(","))
-					.map(v => Number(v))
-					.filter(Number.isFinite);
-			}
-			if (typeof val === "string") {
-				return val.split(",").map(v => Number(v)).filter(Number.isFinite);
-			}
-			if (typeof val === "number" && Number.isFinite(val)) return [val];
-			return [];
-		};
-
-		const ids = Array.from(new Set([
-			...parseIds(req?.query?.habitacionesIds),
-		]));
-
-		const usarFiltro = ids.length > 0;
-
-		// ---- 1) contar habitaciones del universo a evaluar (raw SQL) ----
-		const countSql = `
-      SELECT COUNT(*)::int AS total
-      FROM "Habitacion"
-      ${usarFiltro ? 'WHERE "Habitacion"."idHabitacion" IN (:ids)' : ''};
-    `;
-		const countRows = await sequelize.query(countSql, {
-			type: QueryTypes.SELECT,
-			replacements: usarFiltro ? { ids } : {},
-			// logging: console.log,
-		});
-		const totalSubset = countRows?.[0]?.total ?? 0;
-
-		// Si no hay habitaciones en el subset, no puede haber días completos
-		if (!totalSubset) {
-			return res.json({ fullyBookedDates: [] });
-		}
-
-		// ---- 2) query de calendario (raw SQL) ----
-		const filtroHabitaciones = usarFiltro ? 'AND r."idHabitacion" IN (:ids)' : '';
-
-		const calendarSql = `
-      SELECT to_char(d.day, 'YYYY-MM-DD') AS date
-      FROM generate_series(:startDate::date, :endDate::date, '1 day') AS d(day)
-      LEFT JOIN "Reserva" r
-        ON r."fechaDesde" < (:endDate::date + INTERVAL '1 day')
-       AND r."fechaHasta" > :startDate::date
-       AND d.day BETWEEN date_trunc('day', r."fechaDesde") AND date_trunc('day', r."fechaHasta")
-       ${filtroHabitaciones}
-      GROUP BY d.day
-      HAVING COUNT(DISTINCT r."idHabitacion") = :totalSubset
-      ORDER BY d.day;
-    `;
-
-		const rows = await sequelize.query(calendarSql, {
-			type: QueryTypes.SELECT,
-			replacements: {
-				startDate,
-				endDate,
-				totalSubset,
-				...(usarFiltro ? { ids } : {}),
-			},
-			// logging: console.log,
-		});
-
-		const fullyBookedDates = rows.map(r => r.date);
-		return res.json({ fullyBookedDates });
-	} catch (err) {
-		console.error("Error al calcular calendario:", {
-			message: err?.message,
-			detail: err?.original?.detail || err?.parent?.detail,
-			sql: err?.sql,
-			parameters: err?.parameters,
-			stack: err?.stack,
-		});
-		return next(err);
-	}
-};
-
-/**
  * GET /api/calendario
  * Query params:
  *  - startDate=YYYY-MM-DD (opcional)
@@ -193,7 +109,7 @@ export const getReservasCalendar = async (req, res, next) => {
  *  - includedStatuses=confirmada,checkin (opcional; si viene, ignora excludedStatuses)
  *  - excludedStatuses=cancelada,anulada  (opcional; default: ["cancelada","canceled","anulada","void"])
  */
-export const getReservasCalendar2 = async (req, res, next) => {
+export const getReservasCalendar = async (req, res, next) => {
 	try {
 		const toYMD = (d) => new Date(d).toISOString().slice(0, 10);
 		const today = new Date();
@@ -221,7 +137,7 @@ export const getReservasCalendar2 = async (req, res, next) => {
 		const excludedStatuses = !includedStatuses
 			? (req.query.excludedStatuses
 				? String(req.query.excludedStatuses).split(",").map(s => s.trim().toLowerCase()).filter(Boolean)
-				: ["cancelada", "canceled", "anulada", "void"])
+				: ["cancelada", "canceled", "anulada", "void", "rechazada"])
 			: [];
 
 		// ========== ROOMS ==========
@@ -278,7 +194,8 @@ export const getReservasCalendar2 = async (req, res, next) => {
         to_char(date_trunc('day', r."fechaDesde"), 'YYYY-MM-DD') AS "start",
         to_char(date_trunc('day', r."fechaHasta"), 'YYYY-MM-DD') AS "end",
         COALESCE(hp."nombre", '') AS "guest",
-        r."montoTotal" AS "price",
+        r."montoTotal" AS "montoTotal",
+        r."montoPagado" AS "montoPagado",
         LOWER(er."nombre") AS "status"
       FROM "Reserva" r
       JOIN "Habitacion" h ON h."idHabitacion" = r."idHabitacion"
@@ -288,7 +205,7 @@ export const getReservasCalendar2 = async (req, res, next) => {
       ${usarFiltroHabit ? 'AND h."numero" IN (:numeros)' : ''}
       ORDER BY r."fechaDesde", r."idReserva";
     `;
-		const bookings = await sequelize.query(bookingsSql, {
+		const rawBookings = await sequelize.query(bookingsSql, {
 			type: QueryTypes.SELECT,
 			replacements: {
 				startDate,
@@ -297,6 +214,11 @@ export const getReservasCalendar2 = async (req, res, next) => {
 				...estadoRepl,
 			},
 		});
+
+		// Normalizamos keys/casting para garantizar que montoPagado siempre viaje al frontend
+		const bookings = (rawBookings || []).map((b) => ({
+			...b,
+		}));
 
 		// ========== BY-DATE ==========
 		const byDateSql = `
@@ -678,6 +600,11 @@ export const confirmarReserva = async (req, res, next) => {
 			}
 		}
 
+		broadcast("reserva_actualizada", {
+			id: Number(req.params.id),
+			estado: "confirmada",
+		});
+
 		return res.json({
 			message: "Reserva confirmada correctamente",
 			reserva: updated,
@@ -726,8 +653,87 @@ export const cancelarReserva = async (req, res, next) => {
 			include: ["Huesped", "Habitacion", "EstadoReserva"],
 		});
 
-		// Enviar email de rechazo solo si se cancela desde "pendiente" y el huésped tiene email
-		if (eraPendiente && updated?.Huesped?.email) {
+		// Enviar email al huésped si tiene email registrado
+		if (updated?.Huesped?.email) {
+			try {
+				if (eraPendiente) {
+					// Solicitud no aprobada → email de rechazo
+					await enviarEmailRechazo({
+						to: updated.Huesped.email,
+						nombreHuesped: `${updated.Huesped.nombre} ${updated.Huesped.apellido}`,
+						habitacion: updated.Habitacion?.numero ?? "-",
+						fechaDesde: updated.fechaDesde,
+						fechaHasta: updated.fechaHasta,
+						motivo: req.body?.motivo || null,
+					});
+				} else {
+					// Reserva confirmada cancelada → email de cancelación
+					await enviarEmailCancelacion({
+						to: updated.Huesped.email,
+						nombreHuesped: `${updated.Huesped.nombre} ${updated.Huesped.apellido}`,
+						habitacion: updated.Habitacion?.numero ?? "-",
+						fechaDesde: updated.fechaDesde,
+						fechaHasta: updated.fechaHasta,
+					});
+				}
+			} catch (emailErr) {
+				console.error("Error al enviar email de cancelación:", emailErr);
+			}
+		}
+
+		broadcast("reserva_actualizada", {
+			id: Number(req.params.id),
+			estado: "cancelada",
+		});
+
+		return res.json({
+			message: "Reserva cancelada correctamente",
+			reserva: updated,
+		});
+	} catch (err) {
+		console.error(`Error al cancelar reserva ${req.params.id}:`, err);
+		return next(err);
+	}
+};
+
+/**
+ * Rechaza una reserva pendiente (acción administrativa).
+ * Solo aplica desde el estado "pendiente".
+ * Envía email de rechazo al huésped si tiene email registrado.
+ *
+ * @route PUT /reservas/:id/rechazar
+ */
+export const rechazarReserva = async (req, res, next) => {
+	try {
+		const { EstadoReserva } = await import("../models/estadoReserva.js");
+
+		const reserva = await Reserva.findByPk(req.params.id, {
+			include: [{ model: EstadoReserva, attributes: ["nombre"] }],
+		});
+		if (!reserva) return res.status(404).json({ error: "Reserva no encontrada" });
+
+		const estadoActual = reserva.EstadoReserva?.nombre?.toLowerCase();
+		if (estadoActual !== "pendiente") {
+			return res.status(400).json({
+				error: `Solo se pueden rechazar reservas pendientes. Estado actual: "${reserva.EstadoReserva?.nombre || estadoActual}".`,
+			});
+		}
+
+		const estadoRechazada = await EstadoReserva.findOne({
+			where: { nombre: { [Op.iLike]: "rechazada" } },
+		});
+		if (!estadoRechazada) {
+			return res.status(500).json({ error: "Estado 'rechazada' no encontrado en el sistema" });
+		}
+
+		await reserva.update({ idEstadoReserva: estadoRechazada.idEstadoReserva });
+
+		const updated = await Reserva.findByPk(req.params.id, {
+			include: ["Huesped", "Habitacion", "EstadoReserva"],
+		});
+
+		// Enviar email de rechazo si el huésped tiene email
+		if (updated?.Huesped?.email) {
 			try {
 				await enviarEmailRechazo({
 					to: updated.Huesped.email,
@@ -742,12 +748,17 @@ export const cancelarReserva = async (req, res, next) => {
 			}
 		}
 
+		broadcast("reserva_actualizada", {
+			id: Number(req.params.id),
+			estado: "rechazada",
+		});
+
 		return res.json({
-			message: "Reserva cancelada correctamente",
+			message: "Reserva rechazada correctamente",
 			reserva: updated,
 		});
 	} catch (err) {
-		console.error(`Error al cancelar reserva ${req.params.id}:`, err);
+		console.error(`Error al rechazar reserva ${req.params.id}:`, err);
 		return next(err);
 	}
 };
@@ -783,21 +794,14 @@ export const deleteReserva = async (req, res, next) => {
  * @returns {Object} Datos completos de la reserva creada.
  */
 export const createReservaPublica = async (req, res, next) => {
-	const {
-		huesped: huespedData,
-		idHabitacion,
-		fechaDesde,
-		fechaHasta,
-	} = req.body;
+	const { huesped: huespedData, idHabitacion, fechaDesde, fechaHasta } = req.body;
 
 	try {
 		// --- Validar datos del huésped ---
-		const required = ["dni", "telefono", "origen", "nombre", "apellido"];
+		const required = ["dni", "telefono", "origen", "nombre", "apellido", "email"];
 		const missing = required.filter((f) => !huespedData?.[f]);
 		if (missing.length) {
-			return res.status(400).json({
-				error: `Faltan datos del huésped: ${missing.join(", ")}`
-			});
+			return res.status(400).json({ error: `Faltan datos del huésped: ${missing.join(", ")}` });
 		}
 
 		// --- Verificar lista negra ---
@@ -808,60 +812,128 @@ export const createReservaPublica = async (req, res, next) => {
 			});
 		}
 
-		// --- Validar habitación ---
-		if (!idHabitacion) {
-			return res.status(400).json({ error: "Falta idHabitacion" });
-		}
-
-		// --- Validar fechas ---
-		if (!fechaDesde || !fechaHasta) {
-			return res.status(400).json({ error: "Faltan fechas (fechaDesde, fechaHasta)" });
-		}
+		if (!idHabitacion) return res.status(400).json({ error: "Falta idHabitacion" });
+		if (!fechaDesde || !fechaHasta) return res.status(400).json({ error: "Faltan fechas" });
 
 		const start = new Date(fechaDesde);
 		const end = new Date(fechaHasta);
-
-		if (isNaN(start) || isNaN(end)) {
-			return res.status(400).json({ error: "Formato de fecha inválido" });
-		}
+		if (isNaN(start) || isNaN(end)) return res.status(400).json({ error: "Formato de fecha inválido" });
 
 		const dias = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-		if (dias <= 0) {
-			return res.status(400).json({ error: "La fecha de salida debe ser posterior a la fecha de entrada" });
-		}
+		if (dias <= 0) return res.status(400).json({ error: "La fecha de salida debe ser posterior a la fecha de entrada" });
 
-		// --- Verificar disponibilidad ---
+		// --- Verificar disponibilidad (excluye canceladas y rechazadas) ---
+		const { EstadoReserva } = await import("../models/estadoReserva.js");
 		const reservaSolapada = await Reserva.findOne({
 			where: {
 				idHabitacion,
-				[Op.and]: [
-					{ fechaDesde: { [Op.lt]: end } },
-					{ fechaHasta: { [Op.gt]: start } }
-				],
+				[Op.and]: [{ fechaDesde: { [Op.lt]: end } }, { fechaHasta: { [Op.gt]: start } }],
 			},
+			include: [{
+				model: EstadoReserva,
+				where: { nombre: { [Op.notIn]: ["cancelada", "rechazada"] } },
+				required: true,
+			}],
+		});
+		if (reservaSolapada) return res.status(409).json({ error: "La habitación ya está reservada en esas fechas." });
+
+		// --- Verificar habitación y calcular precio ---
+		const habitacion = await Habitacion.findByPk(idHabitacion, {
+			include: [{ model: TipoHabitacion, attributes: ["precio", "nombre"] }],
+		});
+		if (!habitacion) return res.status(400).json({ error: "Habitación no válida" });
+
+		const montoTotal = habitacion.TipoHabitacion.precio * dias;
+
+		// --- Guardar como pendiente y enviar email de confirmación ---
+		const token = crypto.randomUUID();
+		const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+
+		guardarPendiente(token, {
+			huespedData,
+			idHabitacion,
+			fechaDesde: start.toISOString(),
+			fechaHasta: end.toISOString(),
+			montoTotal,
+			numHabitacion: habitacion.numero,
 		});
 
-		if (reservaSolapada) {
+		const urlConfirmar = `${frontendUrl}/confirmar-reserva?token=${token}&accion=confirmar`;
+		const urlCancelar = `${frontendUrl}/confirmar-reserva?token=${token}&accion=cancelar`;
+		const nombreCompleto = `${huespedData.nombre} ${huespedData.apellido}`;
+
+		enviarEmailConfirmacionIdentidad({
+			to: huespedData.email,
+			nombreHuesped: nombreCompleto,
+			habitacion: habitacion.numero,
+			fechaDesde: start,
+			fechaHasta: end,
+			montoTotal,
+			urlConfirmar,
+			urlCancelar,
+		}).catch((err) => console.error("Error al enviar email de confirmación:", err));
+
+		return res.status(202).json({
+			success: true,
+			mensaje: "Te enviamos un email para confirmar tu identidad. Revisá tu bandeja de entrada.",
+			email: huespedData.email,
+		});
+	} catch (err) {
+		console.error("Error al crear reserva pública:", err);
+		if (err.name === "SequelizeValidationError" || err.name === "SequelizeForeignKeyConstraintError") {
+			return res.status(400).json({ error: err.errors.map((e) => e.message) });
+		}
+		return next(err);
+	}
+};
+
+/**
+ * Confirma una reserva pública a partir de un token de verificación de identidad.
+ * Crea el huésped (o lo actualiza), crea la reserva y notifica a la posada.
+ *
+ * @route GET /public/reservas/confirmar?token=xxx
+ */
+export const confirmarReservaPublica = async (req, res, next) => {
+	const { token } = req.query;
+	if (!token) return res.status(400).json({ error: "Token requerido" });
+
+	const pendiente = obtenerPendiente(token);
+	if (!pendiente) {
+		return res.status(410).json({
+			error: "El enlace ya expiró o no es válido. Podés volver a solicitar la reserva desde el sitio.",
+			code: "TOKEN_EXPIRED",
+		});
+	}
+
+	const { huespedData, idHabitacion, fechaDesde, fechaHasta, montoTotal, numHabitacion } = pendiente;
+
+	try {
+		// --- Re-verificar disponibilidad (excluye canceladas y rechazadas) ---
+		const start = new Date(fechaDesde);
+		const end = new Date(fechaHasta);
+		const { EstadoReserva } = await import("../models/estadoReserva.js");
+
+		const solapada = await Reserva.findOne({
+			where: {
+				idHabitacion,
+				[Op.and]: [{ fechaDesde: { [Op.lt]: end } }, { fechaHasta: { [Op.gt]: start } }],
+			},
+			include: [{
+				model: EstadoReserva,
+				where: { nombre: { [Op.notIn]: ["cancelada", "rechazada"] } },
+				required: true,
+			}],
+		});
+		if (solapada) {
+			eliminarPendiente(token);
 			return res.status(409).json({
-				error: "La habitación ya está reservada en esas fechas.",
+				error: "La habitación ya no está disponible en esas fechas. Por favor realizá una nueva solicitud.",
+				code: "ROOM_UNAVAILABLE",
 			});
 		}
 
-		// --- Verificar que la habitación exista y obtener precio ---
-		const habitacion = await Habitacion.findByPk(idHabitacion, {
-			include: [{ model: TipoHabitacion, attributes: ["precio"] }],
-		});
-
-		if (!habitacion) {
-			return res.status(400).json({ error: "Habitación no válida" });
-		}
-
-		const precioPorNoche = habitacion.TipoHabitacion.precio;
-		const montoTotal = precioPorNoche * dias;
-
-		// --- Buscar o crear huésped por DNI ---
+		// --- Buscar o crear huésped ---
 		let huesped = await Huesped.findOne({ where: { dni: huespedData.dni } });
-
 		if (!huesped) {
 			huesped = await Huesped.create({
 				dni: huespedData.dni,
@@ -869,23 +941,21 @@ export const createReservaPublica = async (req, res, next) => {
 				origen: huespedData.origen,
 				nombre: huespedData.nombre,
 				apellido: huespedData.apellido,
+				email: huespedData.email || null,
 				direccion: huespedData.direccion || null,
 			});
+		} else {
+			const updates = {};
+			if (huespedData.email && huespedData.email !== huesped.email) updates.email = huespedData.email;
+			if (huespedData.telefono && huespedData.telefono !== huesped.telefono) updates.telefono = huespedData.telefono;
+			if (Object.keys(updates).length) await huesped.update(updates);
 		}
 
-		// --- Obtener el ID del estado "pendiente" ---
-		// Asumiendo que existe un estado con nombre "pendiente" o "Pendiente"
-		const { EstadoReserva } = await import("../models/estadoReserva.js");
-		let estadoPendiente = await EstadoReserva.findOne({
-			where: { nombre: { [Op.iLike]: "pendiente" } }
-		});
+		// --- Obtener estado pendiente ---
+		let estadoPendiente = await EstadoReserva.findOne({ where: { nombre: { [Op.iLike]: "pendiente" } } });
+		if (!estadoPendiente) estadoPendiente = await EstadoReserva.create({ nombre: "Pendiente" });
 
-		if (!estadoPendiente) {
-			// Si no existe, crear el estado pendiente
-			estadoPendiente = await EstadoReserva.create({ nombre: "Pendiente" });
-		}
-
-		// --- Crear reserva con estado pendiente y monto pagado en 0 ---
+		// --- Crear reserva ---
 		const nuevaReserva = await Reserva.create({
 			idHuesped: huesped.idHuesped,
 			idHabitacion,
@@ -896,29 +966,73 @@ export const createReservaPublica = async (req, res, next) => {
 			montoTotal,
 		});
 
-		// --- Devolver datos de la reserva ---
-		const reservaCompleta = await Reserva.findByPk(nuevaReserva.idReserva, {
-			attributes: ["idReserva", "fechaDesde", "fechaHasta", "montoPagado", "montoTotal"],
-			include: [
-				{ model: Huesped, attributes: ["dni", "telefono", "origen", "nombre", "apellido"] },
-				{
-					model: Habitacion,
-					attributes: ["numero"],
-					include: [{ model: TipoHabitacion, attributes: ["precio", "nombre"] }]
-				},
-			],
+		eliminarPendiente(token);
+
+		// --- Notificaciones ---
+		broadcast("nueva_reserva", {
+			id: nuevaReserva.idReserva,
+			habitacion: numHabitacion ?? null,
+			huesped: `${huesped.nombre} ${huesped.apellido}`,
 		});
+
+		const nombreCompleto = `${huesped.nombre} ${huesped.apellido}`;
+		const emailHuesped = huesped.email;
+
+		enviarEmailNuevaSolicitudPosada({
+			nombreHuesped: nombreCompleto,
+			dniHuesped: huesped.dni,
+			telefonoHuesped: huesped.telefono,
+			emailHuesped: emailHuesped || null,
+			habitacion: numHabitacion,
+			fechaDesde: start,
+			fechaHasta: end,
+			montoTotal,
+		}).catch((err) => console.error("Error al enviar email a la posada:", err));
 
 		return res.status(201).json({
 			success: true,
-			mensaje: "Reserva creada exitosamente. Estado: PENDIENTE",
-			reserva: reservaCompleta,
+			mensaje: "¡Reserva confirmada! La posada revisará tu solicitud y te avisaremos.",
 		});
 	} catch (err) {
-		console.error("Error al crear reserva pública:", err);
-		if (err.name === "SequelizeValidationError" || err.name === "SequelizeForeignKeyConstraintError") {
-			return res.status(400).json({ error: err.errors.map((e) => e.message) });
-		}
+		console.error("Error al confirmar reserva pública:", err);
+		return next(err);
+	}
+};
+
+/**
+ * Cancela una reserva pendiente de confirmación (token no expirado).
+ *
+ * @route GET /public/reservas/cancelar-pendiente?token=xxx
+ */
+export const cancelarPendientePublica = async (req, res) => {
+	const { token } = req.query;
+	if (!token) return res.status(400).json({ error: "Token requerido" });
+	eliminarPendiente(token);
+	return res.json({ success: true, mensaje: "Solicitud cancelada correctamente." });
+};
+
+/**
+ * Cambia el estado de una reserva a cualquier estado por nombre (sin validaciones de transición).
+ * @route PUT /reservas/:id/estado
+ * @body {string} nombre - nombre del estado destino
+ */
+export const setEstadoReserva = async (req, res, next) => {
+	try {
+		const { nombre } = req.body;
+		if (!nombre) return res.status(400).json({ error: "Falta el campo 'nombre' del estado." });
+
+		const reserva = await Reserva.findByPk(req.params.id);
+		if (!reserva) return res.status(404).json({ error: "Reserva no encontrada." });
+
+		const { EstadoReserva } = await import("../models/estadoReserva.js");
+		const estado = await EstadoReserva.findOne({ where: { nombre: { [Op.iLike]: nombre } } });
+		if (!estado) return res.status(400).json({ error: `Estado '${nombre}' no encontrado.` });
+
+		await reserva.update({ idEstadoReserva: estado.idEstadoReserva });
+
+		return res.json({ id: reserva.idReserva, estado: estado.nombre });
+	} catch (err) {
+		console.error("Error al cambiar estado de reserva:", err);
 		return next(err);
 	}
 };

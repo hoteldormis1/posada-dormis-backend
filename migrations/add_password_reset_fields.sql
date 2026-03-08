@@ -1,5 +1,5 @@
 -- Migración: Agregar campos para reseteo de contraseña
--- Fecha: 2025-11-27
+-- Fecha: 2026-11-27
 -- Descripción: Agrega los campos resetToken y resetTokenExpires a la tabla Usuario
 
 ALTER TABLE Usuario

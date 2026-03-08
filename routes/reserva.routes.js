@@ -5,11 +5,13 @@ import {
 	createReserva,
 	updateReserva,
 	deleteReserva,
-	getReservasCalendar2,
+	getReservasCalendar,
 	checkinReserva,
 	checkoutReserva,
 	confirmarReserva,
 	cancelarReserva,
+	rechazarReserva,
+	setEstadoReserva,
 } from "../controllers/index.js";
 import { auditLogger } from "../middlewares/auditLogger.js";
 import { verifyJWT } from "../middlewares/verifyJWT.js";
@@ -34,7 +36,7 @@ router.get("/", authorize(tipoModelo, "read"), getAllReservas);
 router.get("/pendientes", authorize(tipoModelo, "read"), getPendingReservas);
 
 // Calendario de días completamente ocupados
-router.get("/calendar", authorize(tipoModelo, "read"), getReservasCalendar2);
+router.get("/calendar", authorize(tipoModelo, "read"), getReservasCalendar);
 
 // Crear reserva
 router.post("/", authorize(tipoModelo, "create"), auditLogger(CREATE_RESERVATION), createReserva);
@@ -53,6 +55,12 @@ router.put("/:id/checkout", authorize(tipoModelo, "update"), auditLogger(UPDATE_
 
 // Cancelar reserva
 router.put("/:id/cancelar", authorize(tipoModelo, "update"), auditLogger(UPDATE_RESERVATION), cancelarReserva);
+
+// Rechazar reserva pendiente (acción administrativa)
+router.put("/:id/rechazar", authorize(tipoModelo, "update"), auditLogger(UPDATE_RESERVATION), rechazarReserva);
+
+// Cambiar estado sin restricciones de transición (slider)
+router.put("/:id/estado", authorize(tipoModelo, "update"), auditLogger(UPDATE_RESERVATION), setEstadoReserva);
 
 // Eliminar reserva
 router.delete("/:id", authorize(tipoModelo, "delete"), auditLogger(DELETE_RESERVATION), deleteReserva);

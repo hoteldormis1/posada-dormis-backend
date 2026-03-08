@@ -1,6 +1,7 @@
 // helpers/contable.helper.js (ESM)
-import { Op, fn, col, literal } from 'sequelize';
+import { Op, fn, col, literal, QueryTypes } from 'sequelize';
 import { Reserva, EstadoReserva, Huesped, Habitacion, TipoHabitacion } from '../models/index.js';
+import { sequelize } from '../db.js';
 import { normalizeRange } from './dashboard.helper.js';
 
 // ─────────────────────────── Resumen contable ───────────────────────────
@@ -64,7 +65,27 @@ export async function getResumenContable({ start, end }) {
       Number(totalesGenerales?.montoTotal || 0) - Number(totalesGenerales?.montoPagado || 0),
   };
 
-  return { estados, totalGeneral };
+  // Serie diaria de reservas por fecha
+  // TO_CHAR garantiza que pg devuelva un string 'YYYY-MM-DD' en lugar de un Date object
+  const porFecha = await Reserva.findAll({
+    attributes: [
+      [literal(`TO_CHAR("fechaDesde" AT TIME ZONE 'UTC', 'YYYY-MM-DD')`), 'fecha'],
+      [fn('COUNT', col('idReserva')), 'cantidad'],
+    ],
+    where: {
+      fechaDesde: { [Op.between]: [start, end] },
+    },
+    group: [literal(`TO_CHAR("fechaDesde" AT TIME ZONE 'UTC', 'YYYY-MM-DD')`)],
+    order: [[literal(`TO_CHAR("fechaDesde" AT TIME ZONE 'UTC', 'YYYY-MM-DD')`), 'ASC']],
+    raw: true,
+  });
+
+  const serieReservasPorFecha = porFecha.map((row) => ({
+    fecha: String(row.fecha),
+    cantidad: Number(row.cantidad || 0),
+  }));
+
+  return { estados, totalGeneral, serieReservasPorFecha };
 }
 
 // ─────────────────────────── Listado para exportar ───────────────────────────
@@ -127,5 +148,62 @@ export async function getReservasParaExportar({ start, end, estadoNombre }) {
     montoTotal: Number(r.montoTotal || 0),
     montoPagado: Number(r.montoPagado || 0),
     saldoPendiente: Number(r.montoTotal || 0) - Number(r.montoPagado || 0),
+  }));
+}
+
+// ─────────────────────────── Ocupación por fecha ───────────────────────────
+
+/**
+ * Para cada día en [start, end] devuelve cuántas habitaciones estaban ocupadas
+ * y el porcentaje sobre el total. Usa generate_series para no saltear días sin reservas.
+ */
+export async function getOcupacionPorFecha({ start, end }) {
+  const startISO = start.toISOString().slice(0, 10);
+  const endISO = end.toISOString().slice(0, 10);
+
+  const rows = await sequelize.query(
+    `
+    WITH dates AS (
+      SELECT generate_series(
+        :start::date,
+        :end::date,
+        INTERVAL '1 day'
+      )::date AS fecha
+    ),
+    total_hab AS (
+      SELECT COUNT(*) AS total FROM "Habitacion"
+    ),
+    ocupados AS (
+      SELECT
+        d.fecha,
+        COUNT(DISTINCT r."idHabitacion") AS ocupadas
+      FROM dates d
+      LEFT JOIN "Reserva" r
+        ON r."fechaDesde"::date <= d.fecha
+       AND r."fechaHasta"::date >= d.fecha
+      GROUP BY d.fecha
+    )
+    SELECT
+      TO_CHAR(o.fecha, 'YYYY-MM-DD')        AS fecha,
+      o.ocupadas::int                        AS ocupadas,
+      t.total::int                           AS total,
+      ROUND(
+        o.ocupadas::numeric / NULLIF(t.total, 0) * 100, 1
+      )                                      AS porcentaje
+    FROM ocupados o
+    CROSS JOIN total_hab t
+    ORDER BY o.fecha
+    `,
+    {
+      replacements: { start: startISO, end: endISO },
+      type: QueryTypes.SELECT,
+    }
+  );
+
+  return rows.map((r) => ({
+    fecha: String(r.fecha),
+    ocupadas: Number(r.ocupadas || 0),
+    total: Number(r.total || 0),
+    porcentaje: Number(r.porcentaje || 0),
   }));
 }

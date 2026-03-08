@@ -100,3 +100,68 @@ export const deleteHuesped = async (req, res, next) => {
 		next(err);
 	}
 };
+
+// ─── Endpoints públicos para pre-llenar formulario de reserva ───────────────
+
+/**
+ * Paso 1: recibe DNI, responde solo si existe o no.
+ * NO devuelve datos personales para evitar enumeración.
+ */
+export const buscarHuespedPorDni = async (req, res, next) => {
+	const { dni } = req.body;
+	if (!dni) return res.status(400).json({ error: "DNI requerido" });
+
+	const dniNum = Number(dni);
+	if (!Number.isInteger(dniNum) || dniNum <= 0) {
+		return res.status(400).json({ error: "DNI inválido" });
+	}
+
+	try {
+		const existe = await Huesped.findOne({ where: { dni: dniNum } });
+		return res.json({ encontrado: !!existe });
+	} catch (err) {
+		next(err);
+	}
+};
+
+/**
+ * Paso 2: recibe DNI + teléfono.
+ * Solo devuelve los datos del huésped si ambos coinciden.
+ * El teléfono se compara ignorando espacios y guiones.
+ */
+export const verificarTelefonoHuesped = async (req, res, next) => {
+	const { dni, telefono } = req.body;
+	if (!dni || !telefono) {
+		return res.status(400).json({ error: "DNI y teléfono son requeridos" });
+	}
+
+	const dniNum = Number(dni);
+	if (!Number.isInteger(dniNum) || dniNum <= 0) {
+		return res.status(400).json({ error: "DNI inválido" });
+	}
+
+	try {
+		const huesped = await Huesped.findOne({ where: { dni: dniNum } });
+		if (!huesped) {
+			return res.status(404).json({ error: "Huésped no encontrado" });
+		}
+
+		const normalizar = (t) => String(t).replace(/[\s\-().+]/g, "");
+		if (normalizar(huesped.telefono) !== normalizar(telefono)) {
+			return res.status(401).json({ error: "El teléfono no coincide" });
+		}
+
+		return res.json({
+			idHuesped: huesped.idHuesped,
+			nombre: huesped.nombre,
+			apellido: huesped.apellido,
+			dni: huesped.dni,
+			telefono: huesped.telefono,
+			origen: huesped.origen,
+			email: huesped.email ?? "",
+			direccion: huesped.direccion ?? "",
+		});
+	} catch (err) {
+		next(err);
+	}
+};

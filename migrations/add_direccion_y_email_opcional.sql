@@ -1,5 +1,5 @@
 -- Migración: Añadir campo direccion y hacer email opcional en Huesped
--- Fecha: 2026-01-25
+
 
 -- 1. Añadir columna direccion
 ALTER TABLE "Huesped" 
