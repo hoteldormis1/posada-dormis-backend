@@ -7,6 +7,15 @@
 import { normalizeRange } from '../helpers/index.js';
 import { getResumenContable, getReservasParaExportar, getOcupacionPorFecha } from '../helpers/contable.helper.js';
 
+const parseEstadosQuery = (query) => {
+  const csv = String(query?.estados || "").trim();
+  if (!csv) return [];
+  return csv
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /contable/resumen
 // ─────────────────────────────────────────────────────────────────────────────
@@ -22,8 +31,9 @@ export async function getContableResumen(req, res, next) {
   try {
     const { from, to } = req.query;
     const { start, end } = normalizeRange(from, to);
+    const estadoNombres = parseEstadosQuery(req.query);
 
-    const resumen = await getResumenContable({ start, end });
+    const resumen = await getResumenContable({ start, end, estadoNombres });
 
     return res.json({
       range: {
@@ -80,11 +90,13 @@ export async function getContableExportar(req, res, next) {
   try {
     const { from, to, estado } = req.query;
     const { start, end } = normalizeRange(from, to);
+    const estadosFromQuery = parseEstadosQuery(req.query);
 
     const reservas = await getReservasParaExportar({
       start,
       end,
       estadoNombre: estado || null,
+      estadoNombres: estadosFromQuery,
     });
 
     return res.json({

@@ -79,12 +79,19 @@ export const getAllReservas = async (req, res, next) => {
 
 		const reservasFormateadas = list.map((r) => ({
 			id: r.idReserva,
+			idReserva: r.idReserva,
+			idHuesped: r.idHuesped,
+			idHabitacion: r.idHabitacion,
+			fechaDesde: r.fechaDesde ? r.fechaDesde.toISOString().slice(0, 10) : null,
+			fechaHasta: r.fechaHasta ? r.fechaHasta.toISOString().slice(0, 10) : null,
 			numeroHab: r.Habitacion?.numero ?? "-",
 			ingreso: r.fechaDesde ? new Date(r.fechaDesde).toLocaleDateString() : "-",
 			egreso: r.fechaHasta ? new Date(r.fechaHasta).toLocaleDateString() : "-",
 			huespedNombre: r.Huesped ? `${r.Huesped.nombre} ${r.Huesped.apellido}` : "-",
 			telefonoHuesped: r.Huesped?.telefono ?? "-",
 			dniHuesped: r.Huesped?.dni ?? "-",
+			origenHuesped: r.Huesped?.origen ?? "AR",
+			direccionHuesped: r.Huesped?.direccion ?? "",
 			montoPagado: r.montoPagado,
 			total: r.montoTotal,
 			estadoDeReserva: r.EstadoReserva?.nombre
@@ -455,12 +462,12 @@ export const updateReserva = async (req, res, next) => {
 			const origen = String(estadoActual?.nombre || "").toLowerCase();
 			const destino = String(estadoDestino?.nombre || "").toLowerCase();
 			const origenBloqueado = ["confirmada", "checkin", "checkout"].includes(origen);
-			const destinoBloqueado = ["pendiente", "rechazada"].includes(destino);
+			const destinoBloqueado = ["pendiente"].includes(destino);
 
 			if (origenBloqueado && destinoBloqueado) {
 				return res.status(400).json({
 					error:
-						"No se puede volver a 'pendiente' o 'rechazada' si la reserva ya fue confirmada.",
+						"No se puede volver a 'pendiente' si la reserva ya fue confirmada.",
 					code: "ESTADO_TRANSICION_INVALIDA",
 				});
 			}
