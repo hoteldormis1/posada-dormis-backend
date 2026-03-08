@@ -25,7 +25,7 @@ const adminPerms = {
     huespedNoDeseado: all,
 };
 
-const readerPerms = {
+/*const readerPerms = {
     usuario: { read: true, create: false, delete: false, update: false },
     tipoHabitacion: { read: true, create: false, delete: false, update: false },
     habitacion: { read: true, create: false, delete: false, update: false },
@@ -34,7 +34,7 @@ const readerPerms = {
     estadoReserva: { read: true, create: false, delete: false, update: false },
     auditoria: { read: true, create: false, delete: false, update: false },
     huespedNoDeseado: { read: true, create: false, delete: false, update: false },
-};
+};*/
 
 export async function ensureDefaultRoles() {
     const defaults = [
@@ -52,13 +52,13 @@ export async function ensureDefaultRoles() {
             esSistema: true,
             prioridad: 10,
         },
-        {
+        /*{
             nombre: "reader",
             descripcion: "Reader sólo de pruebas",
             permisos: readerPerms,
             esSistema: true,
             prioridad: 100,
-        },
+        },*/
     ];
 
     for (const role of defaults) {

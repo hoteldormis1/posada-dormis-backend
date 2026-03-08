@@ -1,5 +1,5 @@
 // helpers/contable.helper.js (ESM)
-import { Op, fn, col, literal, QueryTypes } from 'sequelize';
+import { Op, fn, col, literal, QueryTypes, where as sqlWhere } from 'sequelize';
 import { Reserva, EstadoReserva, Huesped, Habitacion, TipoHabitacion } from '../models/index.js';
 import { sequelize } from '../db.js';
 import { normalizeRange } from './dashboard.helper.js';
@@ -10,11 +10,14 @@ import { normalizeRange } from './dashboard.helper.js';
  * Devuelve totales agrupados por estado de reserva dentro de un rango de fechas.
  * Cada estado incluye: cantidad de reservas, montoTotal, montoPagado, y saldo pendiente.
  */
-export async function getResumenContable({ start, end }) {
+export async function getResumenContable({ start, end, estadoNombres = [] }) {
   const whereRange = {
     fechaDesde: { [Op.lte]: end },
     fechaHasta: { [Op.gte]: start },
   };
+  const estadosNormalizados = (estadoNombres || [])
+    .map((s) => String(s).trim().toLowerCase())
+    .filter(Boolean);
 
   // Totales por estado
   const porEstado = await Reserva.findAll({
@@ -29,6 +32,13 @@ export async function getResumenContable({ start, end }) {
       {
         model: EstadoReserva,
         attributes: ['nombre', 'descripcion'],
+        ...(estadosNormalizados.length
+          ? {
+              where: sqlWhere(fn('LOWER', col('EstadoReserva.nombre')), {
+                [Op.in]: estadosNormalizados,
+              }),
+            }
+          : {}),
       },
     ],
     group: ['Reserva.idEstadoReserva', 'EstadoReserva.idEstadoReserva'],
@@ -94,11 +104,14 @@ export async function getResumenContable({ start, end }) {
  * Devuelve un listado detallado de reservas para exportación (CSV/PDF).
  * Incluye datos del huésped, habitación, tipo, estado, montos y fechas.
  */
-export async function getReservasParaExportar({ start, end, estadoNombre }) {
+export async function getReservasParaExportar({ start, end, estadoNombre, estadoNombres = [] }) {
   const whereRange = {
     fechaDesde: { [Op.lte]: end },
     fechaHasta: { [Op.gte]: start },
   };
+  const estadosNormalizados = (estadoNombres || [])
+    .map((s) => String(s).trim().toLowerCase())
+    .filter(Boolean);
 
   const include = [
     {
@@ -118,8 +131,16 @@ export async function getReservasParaExportar({ start, end, estadoNombre }) {
     {
       model: EstadoReserva,
       attributes: ['nombre', 'descripcion'],
-      ...(estadoNombre
-        ? { where: { nombre: estadoNombre } }
+      ...((estadoNombre || estadosNormalizados.length)
+        ? {
+            where: estadoNombre
+              ? sqlWhere(fn('LOWER', col('EstadoReserva.nombre')), {
+                  [Op.eq]: String(estadoNombre).trim().toLowerCase(),
+                })
+              : sqlWhere(fn('LOWER', col('EstadoReserva.nombre')), {
+                  [Op.in]: estadosNormalizados,
+                }),
+          }
         : {}),
     },
   ];
