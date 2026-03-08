@@ -34,7 +34,7 @@ await sequelize.sync({ alter: true }); // Solo en desarrollo
 
 ### add_password_reset_fields.sql
 
-**Fecha**: 2025-11-27
+**Fecha**: 2026-11-27
 
 **Descripción**: Agrega los campos necesarios para la funcionalidad de "Olvidé mi contraseña"
 

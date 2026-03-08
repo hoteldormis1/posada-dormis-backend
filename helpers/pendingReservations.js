@@ -1,10 +1,10 @@
 /**
- * Store en memoria para reservas pendientes de confirmación de identidad.
- * Cada entrada expira a las 2 horas.
- * En producción se puede reemplazar por Redis o una tabla temporal en DB.
+ * Store en memoria para reservas pendientes de confirmacion de identidad.
+ * Cada entrada expira a las 4 horas.
+ * En produccion se puede reemplazar por Redis o una tabla temporal en DB.
  */
 
-const TTL_MS = 2 * 60 * 60 * 1000; // 2 horas
+const TTL_MS = 4 * 60 * 60 * 1000; // 4 horas
 
 /** @type {Map<string, { data: object, expiresAt: number }>} */
 const store = new Map();

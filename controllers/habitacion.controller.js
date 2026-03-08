@@ -77,8 +77,10 @@ export const getHabitacionesDisponiblesPorDia = async (req, res, next) => {
       WITH occupied AS (
         SELECT r."idHabitacion"
         FROM "Reserva" r
+        JOIN "EstadoReserva" er ON er."idEstadoReserva" = r."idEstadoReserva"
         WHERE r."fechaDesde"::date <= :day::date
           AND r."fechaHasta"::date >= :day::date
+          AND LOWER(er."nombre") NOT IN ('cancelada', 'rechazada')
         GROUP BY r."idHabitacion"
       )
       SELECT h.*
@@ -125,8 +127,10 @@ export const getHabitacionesDisponiblesPublico = async (req, res, next) => {
 		WITH occupied AS (
 			SELECT DISTINCT r."idHabitacion"
 			FROM "Reserva" r
+			JOIN "EstadoReserva" er ON er."idEstadoReserva" = r."idEstadoReserva"
 			WHERE r."fechaDesde"::date < :fechaFin::date
 			  AND r."fechaHasta"::date > :fechaInicio::date
+			  AND LOWER(er."nombre") NOT IN ('cancelada', 'rechazada')
 		)
 		SELECT 
 			h."idHabitacion",

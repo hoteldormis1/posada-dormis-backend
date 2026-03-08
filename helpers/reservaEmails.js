@@ -16,23 +16,23 @@ function detalleReservaDark({ habitacion, fechaDesde, fechaHasta, montoTotal }) 
 	const hasta = formatFecha(fechaHasta);
 
 	return `
-	<div style="background: rgba(0,0,0,0.24); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:4px 16px; margin:18px 0;">
-		<div style="display:flex; justify-content:space-between; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.06);">
-			<span style="font-size:13px; color:rgba(255,255,255,0.35);">Habitacion</span>
-			<span style="font-size:13.5px; color:rgba(255,255,255,0.8); font-weight:600;">${habitacion}</span>
+	<div style="background: rgba(0,0,0,0.24); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:10px 20px; margin:18px 0;">
+		<div style="display:flex; justify-content:space-between; align-items:center; gap:16px; padding:18px 0; border-bottom:1px solid rgba(255,255,255,0.06);">
+			<span style="font-size:13px; color:rgba(255,255,255,0.62); min-width:110px;">Habitación:</span>
+			<span style="font-size:13.5px; color:rgba(255,255,255,0.9); font-weight:600; text-align:right;">${habitacion}</span>
 		</div>
-		<div style="display:flex; justify-content:space-between; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.06);">
-			<span style="font-size:13px; color:rgba(255,255,255,0.35);">Check-in</span>
-			<span style="font-size:13.5px; color:rgba(255,255,255,0.8); font-weight:600;">${desde}</span>
+		<div style="display:flex; justify-content:space-between; align-items:center; gap:16px; padding:18px 0; border-bottom:1px solid rgba(255,255,255,0.06);">
+			<span style="font-size:13px; color:rgba(255,255,255,0.62); min-width:110px;">Check-in:</span>
+			<span style="font-size:13.5px; color:rgba(255,255,255,0.9); font-weight:600; text-align:right;">${desde}</span>
 		</div>
-		<div style="display:flex; justify-content:space-between; padding:12px 0; ${montoTotal == null ? "" : "border-bottom:1px solid rgba(255,255,255,0.06);"}">
-			<span style="font-size:13px; color:rgba(255,255,255,0.35);">Check-out</span>
-			<span style="font-size:13.5px; color:rgba(255,255,255,0.8); font-weight:600;">${hasta}</span>
+		<div style="display:flex; justify-content:space-between; align-items:center; gap:16px; padding:18px 0; ${montoTotal == null ? "" : "border-bottom:1px solid rgba(255,255,255,0.06);"}">
+			<span style="font-size:13px; color:rgba(255,255,255,0.62); min-width:110px;">Check-out:</span>
+			<span style="font-size:13.5px; color:rgba(255,255,255,0.9); font-weight:600; text-align:right;">${hasta}</span>
 		</div>
 		${montoTotal != null ? `
-		<div style="display:flex; justify-content:space-between; padding:12px 0;">
-			<span style="font-size:13px; color:rgba(255,255,255,0.45); font-weight:600;">Total</span>
-			<span style="font-size:18px; color:#34D399; font-weight:700; letter-spacing:-0.4px;">$${Number(montoTotal).toLocaleString("es-AR")}</span>
+		<div style="display:flex; justify-content:space-between; align-items:center; gap:16px; padding:18px 0;">
+			<span style="font-size:13px; color:rgba(255,255,255,0.68); font-weight:600; min-width:110px;">Total:</span>
+			<span style="font-size:18px; color:#34D399; font-weight:700; letter-spacing:-0.4px; text-align:right;">$${Number(montoTotal).toLocaleString("es-AR")}</span>
 		</div>` : ""}
 	</div>`;
 }
@@ -47,13 +47,6 @@ function reservaTemplateDark({
 	return `
 	<div style="font-family:'DM Sans','Segoe UI',Arial,sans-serif;background:#0a1f14;padding:24px;">
 		<div style="max-width:560px;margin:0 auto;">
-			<div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;justify-content:center;">
-				<div style="width:36px;height:36px;background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.25);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;">${icono}</div>
-				<div>
-					<div style="font-size:14px;font-weight:700;color:#fff;letter-spacing:-0.2px;">Posada Dormi's</div>
-					<div style="font-size:10.5px;color:rgba(255,255,255,0.3);">Mina Clavero - Cordoba</div>
-				</div>
-			</div>
 
 			<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:22px;overflow:hidden;">
 				<div style="padding:20px 24px;border-bottom:1px solid rgba(255,255,255,0.06);background:rgba(52,211,153,0.05);">
@@ -126,7 +119,7 @@ export async function enviarEmailNuevaSolicitudPosada({ nombreHuesped, dniHuespe
 		badgeColor: "#F59E0B",
 		icono: "🔔",
 		contenido: `
-			<div style="background: rgba(0,0,0,0.24); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:8px 16px;">
+			<div style="background: rgba(0,0,0,0.24); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:10px 16px;">
 				${[
 					["Huesped", nombreHuesped],
 					["DNI", dniHuesped],
@@ -137,9 +130,9 @@ export async function enviarEmailNuevaSolicitudPosada({ nombreHuesped, dniHuespe
 					["Check-out", hasta],
 					["Total estimado", montoTotal != null ? `$${Number(montoTotal).toLocaleString("es-AR")}` : "-"],
 				].map(([k, v]) => `
-					<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
-						<span style="font-size:13px;color:rgba(255,255,255,0.35);">${k}</span>
-						<span style="font-size:13.5px;color:rgba(255,255,255,0.8);font-weight:600;">${v}</span>
+					<div style="display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+						<span style="font-size:13px;color:rgba(255,255,255,0.62);min-width:110px;">${k}:</span>
+						<span style="font-size:13.5px;color:rgba(255,255,255,0.9);font-weight:600;text-align:right;">${v}</span>
 					</div>
 				`).join("")}
 			</div>
@@ -228,9 +221,9 @@ export async function enviarEmailConfirmacionIdentidad({
 				</a>
 			</div>
 
-			<p style="font-size:12px;color:rgba(255,255,255,0.28);margin-top:16px;text-align:center;">
-				Este enlace expira en 2 horas. Si ya expiro, podes volver a solicitar la reserva desde el sitio.
-			</p>
+		<p style="font-size:12px;color:rgba(255,255,255,0.28);margin-top:16px;text-align:center;line-height:1.6;">
+			Este enlace expira en <strong style="color:rgba(255,255,255,0.45);">4 horas</strong>. Confirmalo cuanto antes ya que la disponibilidad no esta garantizada hasta que confirmes. Si el enlace ya expiro, podes volver a solicitar la reserva desde el sitio.
+		</p>
 		`,
 	});
 

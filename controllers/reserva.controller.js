@@ -93,8 +93,6 @@ export const getAllReservas = async (req, res, next) => {
 			idEstadoReserva: r.idEstadoReserva,
 		}));
 
-		console.log("💚", reservasFormateadas);
-
 		return res.json(reservasFormateadas);
 	} catch (err) {
 		console.error("Error al obtener reservas:", err);
@@ -824,12 +822,18 @@ export const createReservaPublica = async (req, res, next) => {
 		const dias = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
 		if (dias <= 0) return res.status(400).json({ error: "La fecha de salida debe ser posterior a la fecha de entrada" });
 
-		// --- Verificar disponibilidad ---
+		// --- Verificar disponibilidad (excluye canceladas y rechazadas) ---
+		const { EstadoReserva } = await import("../models/estadoReserva.js");
 		const reservaSolapada = await Reserva.findOne({
 			where: {
 				idHabitacion,
 				[Op.and]: [{ fechaDesde: { [Op.lt]: end } }, { fechaHasta: { [Op.gt]: start } }],
 			},
+			include: [{
+				model: EstadoReserva,
+				where: { nombre: { [Op.notIn]: ["cancelada", "rechazada"] } },
+				required: true,
+			}],
 		});
 		if (reservaSolapada) return res.status(409).json({ error: "La habitación ya está reservada en esas fechas." });
 
@@ -904,15 +908,21 @@ export const confirmarReservaPublica = async (req, res, next) => {
 	const { huespedData, idHabitacion, fechaDesde, fechaHasta, montoTotal, numHabitacion } = pendiente;
 
 	try {
-		// --- Re-verificar disponibilidad (puede haber cambiado en los 30 min) ---
+		// --- Re-verificar disponibilidad (excluye canceladas y rechazadas) ---
 		const start = new Date(fechaDesde);
 		const end = new Date(fechaHasta);
+		const { EstadoReserva } = await import("../models/estadoReserva.js");
 
 		const solapada = await Reserva.findOne({
 			where: {
 				idHabitacion,
 				[Op.and]: [{ fechaDesde: { [Op.lt]: end } }, { fechaHasta: { [Op.gt]: start } }],
 			},
+			include: [{
+				model: EstadoReserva,
+				where: { nombre: { [Op.notIn]: ["cancelada", "rechazada"] } },
+				required: true,
+			}],
 		});
 		if (solapada) {
 			eliminarPendiente(token);
@@ -942,7 +952,6 @@ export const confirmarReservaPublica = async (req, res, next) => {
 		}
 
 		// --- Obtener estado pendiente ---
-		const { EstadoReserva } = await import("../models/estadoReserva.js");
 		let estadoPendiente = await EstadoReserva.findOne({ where: { nombre: { [Op.iLike]: "pendiente" } } });
 		if (!estadoPendiente) estadoPendiente = await EstadoReserva.create({ nombre: "Pendiente" });
 

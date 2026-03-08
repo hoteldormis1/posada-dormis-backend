@@ -157,20 +157,20 @@ export async function register(req, res) {
 					titulo: "Activá tu cuenta",
 					color: "#43AC6A",
 					contenido: `
-						<p style="font-size: 16px; color: #111827;">Hola <strong>${nombre}</strong>,</p>
-						<p style="font-size: 15px; color: #374151; line-height: 1.6;">
+						<p style="font-size: 16px; color: rgba(255,255,255,0.88);">Hola <strong style="color:#fff;">${nombre}</strong>,</p>
+						<p style="font-size: 15px; color: rgba(255,255,255,0.62); line-height: 1.6;">
 							Tu cuenta fue creada por el administrador. Para activarla y establecer tu contraseña, hacé click en el siguiente botón:
 						</p>
 						<p style="margin: 24px 0; text-align: center;">
 							<a href="${verifyUrl}"
-							   style="background-color: #43AC6A; color: white; padding: 12px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600; font-size: 15px;">
+							   style="background-color:#34D399; color:#071910; padding:12px 32px; text-decoration:none; border-radius:10px; display:inline-block; font-weight:700; font-size:15px; box-shadow:0 6px 24px rgba(52,211,153,0.25);">
 								Activar cuenta
 							</a>
 						</p>
-						<p style="font-size: 13px; color: #6b7280; background: #f3f4f6; padding: 12px 16px; border-radius: 8px; word-break: break-all;">
+						<p style="font-size:13px; color:rgba(255,255,255,0.55); background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); padding:12px 16px; border-radius:10px; word-break:break-all;">
 							O copiá y pegá este enlace: ${verifyUrl}
 						</p>
-						<p style="font-size: 14px; color: #6b7280; margin-top: 16px;"><strong>El enlace vence en 24 horas.</strong></p>
+						<p style="font-size:14px; color:rgba(255,255,255,0.46); margin-top:16px;"><strong style="color:rgba(255,255,255,0.7);">El enlace vence en 24 horas.</strong></p>
 					`,
 				}),
 			});
@@ -280,20 +280,20 @@ export async function requestPasswordReset(req, res) {
 					titulo: "Restablecimiento de contraseña",
 					color: "#43AC6A",
 					contenido: `
-						<p style="font-size: 16px; color: #111827;">Hola <strong>${user.nombre}</strong>,</p>
-						<p style="font-size: 15px; color: #374151; line-height: 1.6;">
+						<p style="font-size: 16px; color: rgba(255,255,255,0.88);">Hola <strong style="color:#fff;">${user.nombre}</strong>,</p>
+						<p style="font-size: 15px; color: rgba(255,255,255,0.62); line-height: 1.6;">
 							Recibimos una solicitud para restablecer tu contraseña. Si no fuiste vos, podés ignorar este correo.
 						</p>
 						<p style="margin: 24px 0; text-align: center;">
 							<a href="${resetUrl}"
-							   style="background-color: #43AC6A; color: white; padding: 12px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600; font-size: 15px;">
+							   style="background-color:#34D399; color:#071910; padding:12px 32px; text-decoration:none; border-radius:10px; display:inline-block; font-weight:700; font-size:15px; box-shadow:0 6px 24px rgba(52,211,153,0.25);">
 								Restablecer contraseña
 							</a>
 						</p>
-						<p style="font-size: 13px; color: #6b7280; background: #f3f4f6; padding: 12px 16px; border-radius: 8px; word-break: break-all;">
+						<p style="font-size:13px; color:rgba(255,255,255,0.55); background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); padding:12px 16px; border-radius:10px; word-break:break-all;">
 							O copiá y pegá este enlace: ${resetUrl}
 						</p>
-						<p style="font-size: 14px; color: #6b7280; margin-top: 16px;"><strong>Este enlace vence en 1 hora.</strong></p>
+						<p style="font-size:14px; color:rgba(255,255,255,0.46); margin-top:16px;"><strong style="color:rgba(255,255,255,0.7);">Este enlace vence en 1 hora.</strong></p>
 					`,
 				}),
 			});
@@ -413,11 +413,11 @@ export async function resetPassword(req, res) {
 					titulo: "Contraseña actualizada",
 					color: "#43AC6A",
 					contenido: `
-						<p style="font-size: 16px; color: #111827;">Hola <strong>${user.nombre}</strong>,</p>
-						<p style="font-size: 15px; color: #374151; line-height: 1.6;">
+						<p style="font-size: 16px; color: rgba(255,255,255,0.88);">Hola <strong style="color:#fff;">${user.nombre}</strong>,</p>
+						<p style="font-size: 15px; color: rgba(255,255,255,0.62); line-height: 1.6;">
 							Tu contraseña fue restablecida exitosamente. Ya podés iniciar sesión con tu nueva contraseña.
 						</p>
-						<p style="font-size: 14px; color: #6b7280; background: #fef2f2; padding: 12px 16px; border-radius: 8px; margin-top: 16px;">
+						<p style="font-size:14px; color:rgba(254,202,202,0.92); background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.24); padding:12px 16px; border-radius:10px; margin-top:16px;">
 							Si no fuiste vos quien realizó este cambio, por favor contactanos inmediatamente.
 						</p>
 					`,
