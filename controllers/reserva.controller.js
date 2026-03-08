@@ -444,6 +444,28 @@ export const updateReserva = async (req, res, next) => {
 	try {
 		const r = await Reserva.findByPk(req.params.id);
 		if (!r) return res.status(404).json({ error: "No existe reserva" });
+
+		// Regla de transición: si la reserva ya avanzó desde confirmada,
+		// no permitir volver a pendiente/rechazada.
+		if (req.body?.idEstadoReserva !== undefined) {
+			const { EstadoReserva } = await import("../models/estadoReserva.js");
+			const estadoActual = await EstadoReserva.findByPk(r.idEstadoReserva);
+			const estadoDestino = await EstadoReserva.findByPk(Number(req.body.idEstadoReserva));
+
+			const origen = String(estadoActual?.nombre || "").toLowerCase();
+			const destino = String(estadoDestino?.nombre || "").toLowerCase();
+			const origenBloqueado = ["confirmada", "checkin", "checkout"].includes(origen);
+			const destinoBloqueado = ["pendiente", "rechazada"].includes(destino);
+
+			if (origenBloqueado && destinoBloqueado) {
+				return res.status(400).json({
+					error:
+						"No se puede volver a 'pendiente' o 'rechazada' si la reserva ya fue confirmada.",
+					code: "ESTADO_TRANSICION_INVALIDA",
+				});
+			}
+		}
+
 		await r.update(req.body);
 		return res.json(r);
 	} catch (err) {
