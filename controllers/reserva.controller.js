@@ -876,7 +876,7 @@ export const createReservaPublica = async (req, res, next) => {
 
 		// --- Guardar como pendiente y enviar email de confirmación ---
 		const token = crypto.randomUUID();
-		const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+		const frontendUrl = process.env.FRONTEND_URL;
 
 		guardarPendiente(token, {
 			huespedData,
