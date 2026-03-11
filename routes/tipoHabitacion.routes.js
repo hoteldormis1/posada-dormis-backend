@@ -14,7 +14,6 @@ const router = Router();
 
 const tipoModelo = "tipoHabitacion";
 
-// Asegúrate de tener al usuario en req.user antes de auditar
 router.use(verifyJWT);
 
 router.get("/", authorize(tipoModelo, "read"), getAllTipoHabitaciones);

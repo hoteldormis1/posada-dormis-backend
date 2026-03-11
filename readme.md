@@ -1,89 +1,103 @@
-# 📘 Documentación de la API
+# Backend - Sistema de Reservas
 
----
+API REST para gestion de reservas, habitaciones, huespedes, autenticacion y auditoria.
 
-## 🌐 Rutas Públicas (sin autenticación)
+## Stack
 
-### Auth
+- Node.js + Express
+- PostgreSQL + Sequelize
+- JWT (access + refresh token)
+- WebSocket (`ws`) para eventos de reservas
 
-| Método | Ruta                 | Descripción                                        |
-|--------|----------------------|----------------------------------------------------|
-| POST   | `/api/auth/login`    | Iniciar sesión, devuelve `accessToken` y cookie de `refreshToken` |
-| POST   | `/api/auth/refresh`  | Refrescar `accessToken` usando cookie             |
-| POST   | `/api/auth/logout`   | Cerrar sesión (elimina cookie)                    |
-| POST   | `/api/auth/register` | Registrar nuevo usuario                           |
+## Requisitos
 
-### Reservas Públicas
+- Node.js 18+
+- PostgreSQL en ejecución
+- Variables de entorno configuradas
 
-| Método | Ruta                                       | Descripción                                        |
-|--------|--------------------------------------------|----------------------------------------------------|
-| GET    | `/api/public/habitaciones/disponibles`     | Buscar habitaciones disponibles por rango de fechas. Query params: `fechaInicio` (YYYY-MM-DD) y `fechaFin` (YYYY-MM-DD) |
-| POST   | `/api/public/reservas`                     | Crear reserva pública (estado: pendiente). Body: `{ huesped: { nombre, apellido, dni, telefono, email, origen }, idHabitacion, fechaDesde, fechaHasta }` |
+## Variables de entorno
 
----
+Crear `backend/.env` con valores similares a:
 
-## 👤 Usuarios
+```env
+PORT=4000
+URL=http://localhost:4000
+DATABASE_URL=postgresql://usuario:password@localhost:5432/tu_db
+NODE_ENV=development
+FRONTEND_URL=http://localhost:3000
+JWT_SECRET_ACCESS=...
+JWT_SECRET_REFRESH=...
+JWT_EXPIRATION_ACCESS=15m
+JWT_EXPIRATION_REFRESH=1d
+```
 
-| Método | Ruta                    | Descripción                 |
-|--------|-------------------------|-----------------------------|
-| GET    | `/api/usuarios`         | Listar todos los usuarios   |
-| DELETE | `/api/usuarios/:id`     | Eliminar usuario por id     |
+## Instalación y ejecución
 
----
+```bash
+cd backend
+npm install
+npm run dev
+```
 
-## 👥 Tipos de Usuario
+Al iniciar, el servidor sincroniza el esquema y asegura datos base:
 
-| Método | Ruta                      | Descripción                   |
-|--------|---------------------------|-------------------------------|
-| GET    | `/api/tipoUsuarios`       | Listar todos los tipos de usuario |
+- roles por defecto
+- estados de reserva por defecto
+- columnas de habitación necesarias
 
----
+## Módulos principales
 
-## 🏨 Habitaciones
+- `auth`: login, refresh, logout, registro
+- `usuarios` y `tipoUsuario`
+- `huespedes` y `huespedes no deseados`
+- `habitaciones` y `tipoHabitacion`
+- `reservas` (admin y públicas)
+- `auditoria`
 
-| Método | Ruta                         | Descripción                           |
-|--------|------------------------------|---------------------------------------|
-| GET    | `/api/habitaciones`          | Listar todas las habitaciones         |
-| GET    | `/api/habitaciones/:id`      | Obtener detalle de una habitación     |
-| POST   | `/api/habitaciones`          | Crear nueva habitación                |
-| PUT    | `/api/habitaciones/:id`      | Actualizar habitación existente       |
-| DELETE | `/api/habitaciones/:id`      | Eliminar habitación por id            |
+## Reglas de negocio relevantes
 
----
+- No se permite crear reservas solapadas para una misma habitación.
+- Se valida lista de huéspedes no deseados por DNI.
+- Una habitación puede deshabilitarse con rango:
+  - `deshabilitadaDesde`
+  - `deshabilitadaHasta`
+  - `observacionDeshabilitacion`
+- La API de reservas valida disponibilidad y estado de habitación antes de confirmar.
 
-## 🚪 Estados de Habitación
+## Scripts utiles
 
-| Método | Ruta                             | Descripción                         |
-|--------|----------------------------------|-------------------------------------|
-| GET    | `/api/estadoReservas`        | Listar todos los estados de habitación |
+- `npm run dev`: inicia backend con nodemon.
+- `npm start`: inicia backend con nodemon.
 
----
+## Endpoints de referencia
 
-## 🛏️ Tipos de Habitación
+### Públicos
 
-| Método | Ruta                              | Descripción                         |
-|--------|-----------------------------------|-------------------------------------|
-| GET    | `/api/tipoHabitaciones`           | Listar todos los tipos de habitación |
-| GET    | `/api/tipoHabitaciones/:id`       | Obtener detalle de un tipo          |
+- `GET /api/public/habitaciones/disponibles`
+- `POST /api/public/reservas`
+- `GET /api/public/reservas/confirmar`
+- `GET /api/public/reservas/cancelar-pendiente`
+- `POST /api/public/huespedes/buscar-dni`
+- `POST /api/public/huespedes/verificar-telefono`
 
----
+### Privados (JWT)
 
-## 🧳 Huéspedes
+- `GET /api/reservas`
+- `POST /api/reservas`
+- `PUT /api/reservas/:id`
+- `PUT /api/reservas/:id/confirmar`
+- `PUT /api/reservas/:id/checkin`
+- `PUT /api/reservas/:id/checkout`
+- `PUT /api/reservas/:id/cancelar`
+- `PUT /api/reservas/:id/rechazar`
+- `GET /api/habitaciones`
+- `POST /api/habitaciones`
+- `PUT /api/habitaciones/:id`
+- `DELETE /api/habitaciones/:id`
 
-| Método | Ruta                     | Descripción                        |
-|--------|--------------------------|------------------------------------|
-| GET    | `/api/huespedes`         | Listar todos los huéspedes         |
-| GET    | `/api/huespedes/:id`     | Obtener un huésped por id          |
-| POST   | `/api/huespedes`         | Crear nuevo huésped                |
+## Evidencia para presentación de tesis
 
----
-
-## 📅 Reservas
-
-| Método | Ruta                           | Descripción                            |
-|--------|--------------------------------|----------------------------------------|
-| GET    | `/api/reservas`               | Listar todas las reservas              |
-| GET    | `/api/reservas/calendar`      | Obtener fechas totalmente ocupadas     |
-| POST   | `/api/reservas`               | Crear nueva reserva                    |
-| PUT    | `/api/reservas/:id`           | Actualizar reserva por id              |
-| DELETE | `/api/reservas/:id`           | Eliminar reserva por id                |
+- Validaciones de negocio centralizadas en controladores.
+- Persistencia transaccional en base relacional.
+- Manejo de errores y códigos HTTP consistentes.
+- Integración con notificaciones email y eventos en tiempo real.

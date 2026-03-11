@@ -16,7 +16,7 @@ import { verifyJWT } from "../middlewares/verifyJWT.js";
 
 const router = express.Router();
 
-// ⚠️ IMPORTANTE: Las rutas públicas DEBEN ir ANTES de verifyJWT
+//  Las rutas públicas DEBEN ir ANTES de verifyJWT
 // Auth routes (login, register, password-reset, etc.)
 router.use("/auth", authRouter);
 

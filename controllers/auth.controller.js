@@ -16,8 +16,6 @@ const IS_PROD = process.env.NODE_ENV === "production";
 const REFRESH_COOKIE_NAME = "refreshToken";
 const REFRESH_COOKIE_PATH = "/api/auth";
 
-// Leído en runtime (no como constante de módulo) para evitar que ESM
-// evalúe esto antes de que dotenv.config() cargue el .env
 const getFrontendUrl = () =>
 	process.env.FRONTEND_URL;
 

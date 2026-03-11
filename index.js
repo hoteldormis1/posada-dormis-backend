@@ -7,8 +7,6 @@ import cookieParser from "cookie-parser";
 import morgan from "morgan";
 import { sequelize } from "./db.js";
 import routes from "./routes/index.js";
-import swaggerUi from "swagger-ui-express";
-import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import { ensureDefaultReservaStates, ensureDefaultRoles } from "./helpers/ensureDefaults.js";
@@ -24,21 +22,9 @@ app.set('trust proxy', 1);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Leer y parsear manualmente swagger.json
-const swaggerRaw = await fs.readFile(
-	path.join(__dirname, "swagger.json"),
-	"utf-8"
-);
-const swaggerDoc = JSON.parse(swaggerRaw);
-
-// Solo en dev: Morgan + Swagger UI
+// Solo en dev: Morgan 
 if (process.env.NODE_ENV !== "production") {
 	app.use(morgan("dev"));
-	app.use(
-		"/docs",
-		swaggerUi.serve,
-		swaggerUi.setup(swaggerDoc, { explorer: true })
-	);
 }
 
 app.use(

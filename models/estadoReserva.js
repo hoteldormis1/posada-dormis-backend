@@ -26,7 +26,7 @@ export const EstadoReserva = sequelize.define(
 		prioridad: {
 			type: DataTypes.INTEGER,
 			allowNull: false,
-			unique: true, // cada valor de prioridad debe ser único
+			unique: true, 
 		},
 	},
 	{
@@ -36,7 +36,7 @@ export const EstadoReserva = sequelize.define(
 			{
 				unique: true,
 				fields: ["esDefault"],
-				where: { esDefault: true }, // solo uno puede ser default
+				where: { esDefault: true }, 
 			},
 		],
 	}
