@@ -55,9 +55,6 @@ const startServer = async () => {
 
 	httpServer.listen(port, () => {
 		console.log(`🚀 Servidor corriendo en ${process.env.URL}`);
-		if (process.env.NODE_ENV !== "production") {
-			console.log(`📚 Swagger UI en ${process.env.URL}/api-docs`);
-		}
 	});
 };
 
