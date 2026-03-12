@@ -19,6 +19,11 @@ import {
 	eliminarPendiente,
 } from "../helpers/pendingReservations.js";
 
+const normalizarTelefonoArgentino = (value) => {
+	const digits = String(value || "").replace(/\D/g, "");
+	return digits.replace(/^549/, "54");
+};
+
 /**
  * Obtiene todas las reservas con información del huésped y habitación asociada.
  * 
@@ -327,9 +332,12 @@ export const createReserva = async (req, res, next) => {
 		if (!(start instanceof Date) || isNaN(start) || !(end instanceof Date) || isNaN(end)) {
 			return res.status(400).json({ error: "Fechas inválidas" });
 		}
-		// Cantidad de días (back-to-back permitido => end > start)
-		const dias = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-		if (dias <= 0) return res.status(400).json({ error: "Rango de fechas inválido" });
+		// Calcular noches comparando solo la parte de fecha en UTC (evita desfases por UTC-3 Argentina)
+		const soloFechaUTC = (d) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+		const noches = Math.round((soloFechaUTC(end) - soloFechaUTC(start)) / 86_400_000);
+		if (noches <= 0) return res.status(400).json({ error: "Rango de fechas inválido" });
+		if (noches < 2) return res.status(400).json({ error: "La estadía mínima es de 2 noches" });
+		const dias = noches; // alias para el cálculo de montoTotal
 
 		// 🔒 0.1) CHEQUEO DE SOLAPAMIENTO (ANTES de crear huésped/hacer más trabajo)
 		// Ajustá el filtro de estados si querés ignorar reservas canceladas, etc.
@@ -848,8 +856,10 @@ export const createReservaPublica = async (req, res, next) => {
 		const end = new Date(fechaHasta);
 		if (isNaN(start) || isNaN(end)) return res.status(400).json({ error: "Formato de fecha inválido" });
 
-		const dias = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+		const soloFechaUTC = (d) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+		const dias = Math.round((soloFechaUTC(end) - soloFechaUTC(start)) / 86_400_000);
 		if (dias <= 0) return res.status(400).json({ error: "La fecha de salida debe ser posterior a la fecha de entrada" });
+		if (dias < 2) return res.status(400).json({ error: "La estadía mínima es de 2 noches" });
 
 		// --- Verificar disponibilidad (excluye canceladas y rechazadas) ---
 		const { EstadoReserva } = await import("../models/estadoReserva.js");
@@ -874,6 +884,31 @@ export const createReservaPublica = async (req, res, next) => {
 
 		const montoTotal = habitacion.TipoHabitacion.precio * dias;
 
+		const normalizarTexto = (value) => String(value || "").trim().toLowerCase();
+		const huespedExistente = await Huesped.findOne({ where: { dni: huespedData.dni } });
+		const cambiosDetectados = [];
+		if (huespedExistente) {
+			if (
+				huespedData.email &&
+				normalizarTexto(huespedData.email) !== normalizarTexto(huespedExistente.email)
+			) {
+				cambiosDetectados.push("email");
+			}
+			if (
+				huespedData.telefono &&
+				normalizarTelefonoArgentino(huespedData.telefono) !==
+					normalizarTelefonoArgentino(huespedExistente.telefono)
+			) {
+				cambiosDetectados.push("telefono");
+			}
+			if (
+				(huespedData.direccion || "").trim() !== (huespedExistente.direccion || "").trim()
+			) {
+				cambiosDetectados.push("direccion");
+			}
+		}
+		const hayCambiosDatos = cambiosDetectados.length > 0;
+
 		// --- Guardar como pendiente y enviar email de confirmación ---
 		const token = crypto.randomUUID();
 		const frontendUrl = process.env.FRONTEND_URL;
@@ -885,6 +920,8 @@ export const createReservaPublica = async (req, res, next) => {
 			fechaHasta: end.toISOString(),
 			montoTotal,
 			numHabitacion: habitacion.numero,
+			hayCambiosDatos,
+			cambiosDetectados,
 		});
 
 		const urlConfirmar = `${frontendUrl}/confirmar-reserva?token=${token}&accion=confirmar`;
@@ -892,7 +929,7 @@ export const createReservaPublica = async (req, res, next) => {
 		const nombreCompleto = `${huespedData.nombre} ${huespedData.apellido}`;
 
 		enviarEmailConfirmacionIdentidad({
-			to: huespedData.email,
+			to: hayCambiosDatos && huespedExistente?.email ? huespedExistente.email : huespedData.email,
 			nombreHuesped: nombreCompleto,
 			habitacion: habitacion.numero,
 			fechaDesde: start,
@@ -900,6 +937,8 @@ export const createReservaPublica = async (req, res, next) => {
 			montoTotal,
 			urlConfirmar,
 			urlCancelar,
+			hayCambiosDatos,
+			cambiosDetectados,
 		}).catch((err) => console.error("Error al enviar email de confirmación:", err));
 
 		return res.status(202).json({
@@ -976,7 +1015,14 @@ export const confirmarReservaPublica = async (req, res, next) => {
 		} else {
 			const updates = {};
 			if (huespedData.email && huespedData.email !== huesped.email) updates.email = huespedData.email;
-			if (huespedData.telefono && huespedData.telefono !== huesped.telefono) updates.telefono = huespedData.telefono;
+			if (
+				huespedData.telefono &&
+				normalizarTelefonoArgentino(huespedData.telefono) !==
+					normalizarTelefonoArgentino(huesped.telefono)
+			) {
+				updates.telefono = huespedData.telefono;
+			}
+			if (huespedData.direccion !== undefined && (huespedData.direccion || null) !== huesped.direccion) updates.direccion = huespedData.direccion || null;
 			if (Object.keys(updates).length) await huesped.update(updates);
 		}
 

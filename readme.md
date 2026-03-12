@@ -1,23 +1,31 @@
-# Backend - Sistema de Reservas
+# Backend - Posada Dormis API
 
-API REST para gestion de reservas, habitaciones, huespedes, autenticacion y auditoria.
+API REST para autenticacion, gestion de usuarios, huespedes, habitaciones y reservas.
 
-## Stack
+## Responsabilidad del modulo
+
+- Exponer endpoints HTTP bajo `/api`.
+- Aplicar reglas de negocio del dominio.
+- Persistir datos en PostgreSQL.
+- Emitir eventos y notificaciones (WebSocket + email).
+
+## Tecnologias
 
 - Node.js + Express
-- PostgreSQL + Sequelize
-- JWT (access + refresh token)
-- WebSocket (`ws`) para eventos de reservas
+- Sequelize
+- PostgreSQL
+- JWT (access/refresh)
+- WebSocket (`ws`)
 
 ## Requisitos
 
-- Node.js 18+
-- PostgreSQL en ejecución
-- Variables de entorno configuradas
+- Node.js 18 o superior
+- Base PostgreSQL disponible
+- Variables de entorno completas
 
-## Variables de entorno
+## Configuracion de entorno
 
-Crear `backend/.env` con valores similares a:
+Crear `backend/.env`:
 
 ```env
 PORT=4000
@@ -25,13 +33,13 @@ URL=http://localhost:4000
 DATABASE_URL=postgresql://usuario:password@localhost:5432/tu_db
 NODE_ENV=development
 FRONTEND_URL=http://localhost:3000
-JWT_SECRET_ACCESS=...
-JWT_SECRET_REFRESH=...
+JWT_SECRET_ACCESS=replace_me
+JWT_SECRET_REFRESH=replace_me
 JWT_EXPIRATION_ACCESS=15m
 JWT_EXPIRATION_REFRESH=1d
 ```
 
-## Instalación y ejecución
+## Ejecucion
 
 ```bash
 cd backend
@@ -39,40 +47,29 @@ npm install
 npm run dev
 ```
 
-Al iniciar, el servidor sincroniza el esquema y asegura datos base:
+Al iniciar, el servidor ejecuta sincronizacion de esquema y datos base (roles/estados por defecto).
 
-- roles por defecto
-- estados de reserva por defecto
-- columnas de habitación necesarias
+## Scripts disponibles
 
-## Módulos principales
+- `npm run dev`: desarrollo con nodemon.
+- `npm start`: arranque equivalente con nodemon.
 
-- `auth`: login, refresh, logout, registro
-- `usuarios` y `tipoUsuario`
-- `huespedes` y `huespedes no deseados`
-- `habitaciones` y `tipoHabitacion`
-- `reservas` (admin y públicas)
-- `auditoria`
+## Estructura recomendada para lectura
 
-## Reglas de negocio relevantes
+- `models/`: estructura de datos y asociaciones.
+- `controllers/`: logica de negocio y validaciones.
+- `routes/`: contrato HTTP por recurso.
+- `middlewares/`: auth, permisos, auditoria, rate limit.
+- `helpers/`: funciones reutilizables (emails, contable, dashboard, etc.).
 
-- No se permite crear reservas solapadas para una misma habitación.
-- Se valida lista de huéspedes no deseados por DNI.
-- Una habitación puede deshabilitarse con rango:
-  - `deshabilitadaDesde`
-  - `deshabilitadaHasta`
-  - `observacionDeshabilitacion`
-- La API de reservas valida disponibilidad y estado de habitación antes de confirmar.
+## Endpoints principales
 
-## Scripts utiles
+### Publicos
 
-- `npm run dev`: inicia backend con nodemon.
-- `npm start`: inicia backend con nodemon.
-
-## Endpoints de referencia
-
-### Públicos
-
+- `POST /api/auth/login`
+- `POST /api/auth/refresh`
+- `POST /api/auth/register`
+- `POST /api/auth/logout`
 - `GET /api/public/habitaciones/disponibles`
 - `POST /api/public/reservas`
 - `GET /api/public/reservas/confirmar`
@@ -80,24 +77,26 @@ Al iniciar, el servidor sincroniza el esquema y asegura datos base:
 - `POST /api/public/huespedes/buscar-dni`
 - `POST /api/public/huespedes/verificar-telefono`
 
-### Privados (JWT)
+### Protegidos por JWT
 
-- `GET /api/reservas`
-- `POST /api/reservas`
-- `PUT /api/reservas/:id`
-- `PUT /api/reservas/:id/confirmar`
-- `PUT /api/reservas/:id/checkin`
-- `PUT /api/reservas/:id/checkout`
-- `PUT /api/reservas/:id/cancelar`
-- `PUT /api/reservas/:id/rechazar`
-- `GET /api/habitaciones`
-- `POST /api/habitaciones`
-- `PUT /api/habitaciones/:id`
-- `DELETE /api/habitaciones/:id`
+- `GET /api/usuarios`, `GET /api/usuarios/me`, `POST /api/usuarios/invite`, `DELETE /api/usuarios/:id`
+- `GET /api/tipoUsuarios`
+- `GET/POST/PUT/DELETE /api/huespedes`
+- `GET/POST/PUT/DELETE /api/habitaciones`
+- `GET/POST/PUT/DELETE /api/tipoHabitacion`
+- `GET/POST /api/estadoReserva`
+- `GET/POST/PUT/DELETE /api/reservas` y acciones de estado (`confirmar`, `checkin`, `checkout`, `cancelar`, `rechazar`)
+- `GET /api/dashboards/summary`
+- `GET /api/contable/resumen`, `GET /api/contable/exportar`, `GET /api/contable/ocupacion`
 
-## Evidencia para presentación de tesis
+## Reglas de negocio relevantes
 
-- Validaciones de negocio centralizadas en controladores.
-- Persistencia transaccional en base relacional.
-- Manejo de errores y códigos HTTP consistentes.
-- Integración con notificaciones email y eventos en tiempo real.
+- No se admiten reservas solapadas por habitacion.
+- `fechaHasta` debe ser posterior a `fechaDesde`.
+- Validacion de DNI en lista de huespedes no deseados.
+- Manejo de estados de reserva y transiciones segun flujo operativo.
+- Auditoria de acciones relevantes.
+
+## Nota de documentacion
+
+Actualmente no se incluye `swagger.json` en el repositorio. Este README actua como referencia funcional de la API.

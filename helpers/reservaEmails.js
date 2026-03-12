@@ -199,7 +199,16 @@ export async function enviarEmailConfirmacionIdentidad({
 	montoTotal,
 	urlConfirmar,
 	urlCancelar,
+	hayCambiosDatos = false,
+	cambiosDetectados = [],
 }) {
+	const ctaLabel = hayCambiosDatos
+		? "Sí, confirmar cambio + reserva"
+		: "Sí, confirmar reserva";
+	const detalleCambios = hayCambiosDatos
+		? `<p style="font-size:13px;color:#FDE68A;background:rgba(245,158,11,0.16);border:1px solid rgba(245,158,11,0.38);padding:10px 12px;border-radius:10px;margin:10px 0 0;"><strong>Atención:</strong> esta confirmación aplicará cambios en tus datos (${cambiosDetectados.join(", ")}).</p>`
+		: "";
+
 	const html = reservaTemplateDark({
 		titulo: "¿Solicitaste esta reserva?",
 		badge: "Solicitud de reserva",
@@ -211,10 +220,11 @@ export async function enviarEmailConfirmacionIdentidad({
 				Si fuiste vos, confirmala. Si no reconoces esta solicitud, cancelala.
 			</p>
 			${detalleReservaDark({ habitacion, fechaDesde, fechaHasta, montoTotal })}
+			${detalleCambios}
 
 			<div style="display:flex;flex-direction:column;gap:10px;margin-top:18px;">
 			<a href="${urlConfirmar}" style="display:block;width:100%;background:#34D399;color:#071910;border-radius:13px;padding:14px 16px;font-size:15px;font-weight:700;text-decoration:none;text-align:center;box-shadow:0 6px 24px rgba(52,211,153,0.25);">
-				✓ &nbsp;Sí, confirmar mi reserva
+				✓ &nbsp;${ctaLabel}
 				</a>
 				<a href="${urlCancelar}" style="display:block;width:100%;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.22);border-radius:13px;padding:12px 16px;font-size:13.5px;font-weight:600;color:rgba(239,68,68,0.82);text-decoration:none;text-align:center;">
 				✕ &nbsp;No fui yo, cancelar solicitud

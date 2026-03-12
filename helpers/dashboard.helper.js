@@ -1,10 +1,12 @@
 // helpers/dashboard.helpers.js (ESM)
-import { Op, fn, col, literal } from 'sequelize';
+import { Op, fn, col, literal, where as sqlWhere } from 'sequelize';
 import { Habitacion, Reserva } from '../models/index.js';
+import { sequelize } from '../db.js';
 
 // Config
 export const GRAN_MAP = { day: 'day', week: 'week', month: 'month', year: 'year' };
 export const ESTADOS_VENTA_IDS = []; // p.ej. [2,3] si contás ventas por estado
+let timelineColumnCache = null;
 
 // ─────────────────────────── Utils de fecha ───────────────────────────
 export function parseDateISO(d) {
@@ -38,6 +40,31 @@ export function whereVenta(baseWhere, ventaBy) {
         return { ...baseWhere, idEstadoReserva: { [Op.in]: ESTADOS_VENTA_IDS } };
     }
     return { ...baseWhere, montoPagado: { [Op.gt]: 0 } };
+}
+
+async function resolveTimelineColumn() {
+    if (timelineColumnCache) return timelineColumnCache;
+
+    try {
+        const qi = sequelize.getQueryInterface();
+        const cols = await qi.describeTable('Reserva');
+        const candidates = ['fechaCreacion', 'createdAt', 'created_at'];
+        const found = candidates.find((c) => Object.prototype.hasOwnProperty.call(cols, c));
+        timelineColumnCache = found || 'fechaDesde';
+    } catch {
+        timelineColumnCache = 'fechaDesde';
+    }
+
+    return timelineColumnCache;
+}
+
+function buildTimelineWhere(start, end, timelineColumn) {
+    return {
+        [Op.and]: [
+            sqlWhere(col(timelineColumn), { [Op.gte]: start }),
+            sqlWhere(col(timelineColumn), { [Op.lte]: end }),
+        ],
+    };
 }
 
 // ─────────────── Helpers de formateo de labels/fechas ────────────────
@@ -113,7 +140,8 @@ export function bucketExprOn({ agruparPor, bucketDays, originIso, tsExpr }) {
 
 // ───────────────────────────── Servicios/aggregations ─────────────────────────────
 export async function getTotals({ start, end, ventaBy }) {
-    const whereAll = whereRangoSolapado(start, end);
+    const timelineColumn = await resolveTimelineColumn();
+    const whereAll = buildTimelineWhere(start, end, timelineColumn);
     const reservasTotal = await Reserva.count({ where: whereAll });
 
     const [agg] = await Reserva.findAll({
@@ -126,11 +154,30 @@ export async function getTotals({ start, end, ventaBy }) {
         raw: true,
     });
 
+    const huespedesTotal = await Reserva.count({
+        distinct: true,
+        col: 'idHuesped',
+        where: whereAll,
+    });
+
+    const [nightsAgg] = await Reserva.findAll({
+        attributes: [
+            [
+                literal('COALESCE(AVG(EXTRACT(EPOCH FROM ("fechaHasta" - "fechaDesde")) / 86400.0), 0)'),
+                'nochesPromedioEstadia',
+            ],
+        ],
+        where: whereAll,
+        raw: true,
+    });
+
     return {
         reservasTotal,
         ventasTotal: Number(agg?.ventas || 0),
         montoPagado: Number(agg?.montoPagado || 0),
         montoTotal: Number(agg?.montoTotal || 0),
+        huespedesTotal,
+        nochesPromedioEstadia: Number(nightsAgg?.nochesPromedioEstadia || 0),
     };
 }
 
@@ -144,22 +191,23 @@ export async function getTelemetry({
     locale = 'es-AR',
 }) {
     const originIso = start.toISOString();
+    const timelineColumn = await resolveTimelineColumn();
 
     const bucketSQL = bucketExprOn({
         agruparPor,
         bucketDays,
         originIso,
-        tsExpr: `"fechaDesde" AT TIME ZONE 'UTC'`,
+        tsExpr: `"${timelineColumn}" AT TIME ZONE 'UTC'`,
     });
 
-    const whereStartOnly = { fechaDesde: { [Op.between]: [start, end] } };
+    const whereTimelineOnly = buildTimelineWhere(start, end, timelineColumn);
 
     const reservasSeries = await Reserva.findAll({
         attributes: [
             [literal(bucketSQL), 'bucket'],
             [fn('COUNT', col('idReserva')), 'count'],
         ],
-        where: whereStartOnly,
+        where: whereTimelineOnly,
         group: [literal(bucketSQL)],
         order: [literal(bucketSQL)],
         raw: true,
@@ -169,9 +217,9 @@ export async function getTelemetry({
         attributes: [
             [literal(bucketSQL), 'bucket'],
             [fn('COUNT', col('idReserva')), 'count'],
-            [fn('COALESCE', fn('SUM', col('montoTotal')), 0), 'sum'],
+            [fn('COALESCE', fn('SUM', col('montoPagado')), 0), 'sum'],
         ],
-        where: whereVenta(whereStartOnly, ventaBy),
+        where: whereVenta(whereTimelineOnly, ventaBy),
         group: [literal(bucketSQL)],
         order: [literal(bucketSQL)],
         raw: true,
@@ -189,6 +237,7 @@ export async function getTelemetry({
 
     return {
         agruparPor: Number(bucketDays) > 0 ? `${Math.max(1, Math.floor(+bucketDays))}d` : (agruparPor || 'day'),
+        timelineColumn,
         reservas: reservasSeries.map(mapRow),
         ventas: ventasSeries.map(mapRow),
     };
