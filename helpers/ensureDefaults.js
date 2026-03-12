@@ -1,5 +1,6 @@
 import { EstadoReserva } from "../models/estadoReserva.js";
 import { TipoUsuario } from "../models/tipoUsuario.js";
+import { sequelize } from "../db.js";
 
 const all = { create: true, read: true, update: true, delete: true };
 
@@ -96,4 +97,11 @@ export async function ensureDefaultReservaStates() {
     await EstadoReserva.update({ esDefault: false }, { where: {} });
     // Luego, enciende el deseado
     await EstadoReserva.update({ esDefault: true }, { where: { nombre: "pendiente" } });
+}
+
+export async function ensureHabitacionSchema() {
+    await sequelize.query(`
+        ALTER TABLE "Habitacion"
+        ADD COLUMN IF NOT EXISTS "fueraDeServicio" BOOLEAN NOT NULL DEFAULT FALSE;
+    `);
 }

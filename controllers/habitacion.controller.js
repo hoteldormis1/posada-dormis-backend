@@ -89,7 +89,7 @@ export const getHabitacionesDisponiblesPorDia = async (req, res, next) => {
       FROM "Habitacion" h
       LEFT JOIN occupied o ON o."idHabitacion" = h."idHabitacion"
       WHERE o."idHabitacion" IS NULL
-        AND h."fueraDeServicio" = false
+        AND COALESCE(h."fueraDeServicio", false) = false
       ORDER BY h."idHabitacion";
     `;
 		const rooms = await sequelize.query(sql, {
@@ -145,7 +145,7 @@ export const getHabitacionesDisponiblesPublico = async (req, res, next) => {
 		INNER JOIN "TipoHabitacion" th ON th."idTipoHabitacion" = h."idTipoHabitacion"
 		LEFT JOIN occupied o ON o."idHabitacion" = h."idHabitacion"
 		WHERE o."idHabitacion" IS NULL
-		  AND h."fueraDeServicio" = false
+		  AND COALESCE(h."fueraDeServicio", false) = false
 		ORDER BY th."precio", h."numero";
 	`;
 
@@ -167,7 +167,7 @@ export const getHabitacionesDisponiblesPublico = async (req, res, next) => {
 
 // POST /habitaciones
 export const createHabitacion = async (req, res, next) => {
-	const { idTipoHabitacion, numero } = req.body;
+	const { idTipoHabitacion, numero, fueraDeServicio } = req.body;
 	try {
 		const nombre = await TipoHabitacion.findByPk(idTipoHabitacion);
 		if (!nombre) {
@@ -177,6 +177,7 @@ export const createHabitacion = async (req, res, next) => {
 		const nueva = await Habitacion.create({
 			idTipoHabitacion,
 			numero,
+			fueraDeServicio: typeof fueraDeServicio === "boolean" ? fueraDeServicio : false,
 		});
 		res.status(201).json(nueva);
 	} catch (err) {
@@ -190,7 +191,7 @@ export const createHabitacion = async (req, res, next) => {
 
 // PUT /habitaciones/:id
 export const updateHabitacion = async (req, res, next) => {
-	const { idTipoHabitacion, numero } = req.body;
+	const { idTipoHabitacion, numero, fueraDeServicio } = req.body;
 	try {
 		const h = await Habitacion.findByPk(req.params.id);
 		if (!h) return res.status(404).json({ error: "No existe habitación" });
@@ -205,6 +206,9 @@ export const updateHabitacion = async (req, res, next) => {
 
 		if (numero !== undefined) {
 			h.numero = numero;
+		}
+		if (fueraDeServicio !== undefined) {
+			h.fueraDeServicio = Boolean(fueraDeServicio);
 		}
 
 		await h.save();

@@ -24,6 +24,16 @@ const normalizarTelefonoArgentino = (value) => {
 	return digits.replace(/^549/, "54");
 };
 
+const validarHabitacionHabilitada = (habitacion) => {
+	if (habitacion?.fueraDeServicio) {
+		return {
+			error: "La habitación se encuentra fuera de servicio.",
+			code: "ROOM_DISABLED",
+		};
+	}
+	return null;
+};
+
 /**
  * Obtiene todas las reservas con información del huésped y habitación asociada.
  * 
@@ -404,6 +414,8 @@ export const createReserva = async (req, res, next) => {
 			include: [{ model: TipoHabitacion, attributes: ["precio"] }],
 		});
 		if (!habitacion) return res.status(400).json({ error: "Habitación no válida" });
+		const bloqueoHabitacion = validarHabitacionHabilitada(habitacion);
+		if (bloqueoHabitacion) return res.status(409).json(bloqueoHabitacion);
 
 		const precioPorNoche = habitacion.TipoHabitacion.precio;
 
@@ -881,6 +893,8 @@ export const createReservaPublica = async (req, res, next) => {
 			include: [{ model: TipoHabitacion, attributes: ["precio", "nombre"] }],
 		});
 		if (!habitacion) return res.status(400).json({ error: "Habitación no válida" });
+		const bloqueoHabitacion = validarHabitacionHabilitada(habitacion);
+		if (bloqueoHabitacion) return res.status(409).json(bloqueoHabitacion);
 
 		const montoTotal = habitacion.TipoHabitacion.precio * dias;
 
@@ -998,6 +1012,17 @@ export const confirmarReservaPublica = async (req, res, next) => {
 				error: "La habitación ya no está disponible en esas fechas. Por favor realizá una nueva solicitud.",
 				code: "ROOM_UNAVAILABLE",
 			});
+		}
+
+		const habitacion = await Habitacion.findByPk(idHabitacion);
+		if (!habitacion) {
+			eliminarPendiente(token);
+			return res.status(400).json({ error: "Habitación no válida" });
+		}
+		const bloqueoHabitacion = validarHabitacionHabilitada(habitacion);
+		if (bloqueoHabitacion) {
+			eliminarPendiente(token);
+			return res.status(409).json(bloqueoHabitacion);
 		}
 
 		// --- Buscar o crear huésped ---

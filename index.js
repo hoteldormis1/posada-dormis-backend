@@ -9,7 +9,11 @@ import { sequelize } from "./db.js";
 import routes from "./routes/index.js";
 import path from "path";
 import { fileURLToPath } from "url";
-import { ensureDefaultReservaStates, ensureDefaultRoles } from "./helpers/ensureDefaults.js";
+import {
+	ensureDefaultReservaStates,
+	ensureDefaultRoles,
+	ensureHabitacionSchema,
+} from "./helpers/ensureDefaults.js";
 import { initWss } from "./ws.js";
 
 dotenv.config();
@@ -50,6 +54,7 @@ const startServer = async () => {
 
 	await ensureDefaultRoles();
 	await ensureDefaultReservaStates();
+	await ensureHabitacionSchema();
 
 	initWss(httpServer);
 
