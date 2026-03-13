@@ -6,16 +6,16 @@ Este directorio contiene scripts SQL para migraciones de la base de datos.
 
 ### Opción 1: Ejecución manual de SQL
 
-1. Conectate a tu base de datos MySQL/MariaDB
+1. Conectate a tu base de datos PostgreSQL
 2. Ejecutá el script SQL correspondiente:
 
 ```bash
-mysql -u tu_usuario -p tu_base_de_datos < add_password_reset_fields.sql
+psql -d tu_base_de_datos -U tu_usuario -f add_password_reset_fields.sql
 ```
 
 ### Opción 2: Desde un cliente de base de datos
 
-1. Abrí tu cliente de MySQL (MySQL Workbench, phpMyAdmin, DBeaver, etc.)
+1. Abrí tu cliente de PostgreSQL (DBeaver, pgAdmin, DataGrip, etc.)
 2. Abrí el archivo SQL
 3. Ejecutá el script
 
@@ -28,7 +28,7 @@ Si estás usando Sequelize con `sync()`, los campos se crearán automáticamente
 await sequelize.sync({ alter: true }); // Solo en desarrollo
 ```
 
-⚠️ **Nota**: En producción, es recomendable ejecutar las migraciones manualmente y no usar `sync({ alter: true })`.
+⚠️ **Nota**: En producción se recomienda ejecutar migraciones manuales y evitar `sync({ alter: true })`.
 
 ## Migraciones disponibles
 
@@ -45,12 +45,15 @@ await sequelize.sync({ alter: true }); // Solo en desarrollo
 **Índices creados**:
 - `idx_usuario_reset_token`: Índice en el campo resetToken para búsquedas rápidas
 
-## Verificar la migración
+## Verificar la migración (PostgreSQL)
 
 Después de ejecutar la migración, verificá que los campos se hayan creado correctamente:
 
 ```sql
-DESCRIBE Usuario;
+SELECT column_name
+FROM information_schema.columns
+WHERE table_name = 'Usuario'
+ORDER BY ordinal_position;
 ```
 
 Deberías ver los campos `resetToken` y `resetTokenExpires` en la tabla Usuario.

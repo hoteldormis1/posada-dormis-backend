@@ -6,6 +6,7 @@ import {
 	updateHabitacion,
 	deleteHabitacion,
 	getHabitacionesDisponiblesPorDia,
+	toggleFueraDeServicio,
 } from "../controllers/index.js";
 import { auditLogger } from "../middlewares/auditLogger.js";
 import { CREATE_ROOM, DELETE_ROOM, UPDATE_ROOM } from "../constants/index.js";
@@ -20,8 +21,11 @@ router.get("/", authorize(tipoModelo, "read"), getAllHabitaciones);
 // Crear habitación
 router.post("/", authorize(tipoModelo, "create"), auditLogger(CREATE_ROOM), createHabitacion);
 
-// Actualizar habitación →
+// Actualizar habitación
 router.put("/:id", authorize(tipoModelo, "update"), auditLogger(UPDATE_ROOM), updateHabitacion);
+
+// Alternar estado fuera de servicio
+router.put("/:id/fuera-de-servicio", authorize(tipoModelo, "update"), auditLogger(UPDATE_ROOM), toggleFueraDeServicio);
 
 router.get("/disponibles", authorize(tipoModelo, "read"), getHabitacionesDisponiblesPorDia);
 

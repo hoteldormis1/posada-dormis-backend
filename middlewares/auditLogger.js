@@ -1,6 +1,6 @@
 import { Auditoria } from "../models/auditoria.js";
 
-const SENSITIVE_KEYS = ["clave", "password", "token"]; // podés agregar más
+const SENSITIVE_KEYS = ["clave", "password", "token"];
 
 function sanitize(obj) {
 	if (!obj || typeof obj !== "object") return obj;

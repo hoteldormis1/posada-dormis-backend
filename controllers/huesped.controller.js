@@ -1,5 +1,6 @@
 import { Huesped } from "../models/huesped.js";
 import { Sequelize } from "sequelize";
+import { isDniBlacklisted } from "./huespedNoDeseado.controller.js";
 
 const requiredFields = [
 	"nombre",
@@ -117,6 +118,9 @@ export const buscarHuespedPorDni = async (req, res, next) => {
 	}
 
 	try {
+		if (await isDniBlacklisted(dni)) {
+			return res.status(403).json({ code: "DNI_BLACKLISTED" });
+		}
 		const existe = await Huesped.findOne({ where: { dni: dniNum } });
 		return res.json({ encontrado: !!existe });
 	} catch (err) {
@@ -146,7 +150,10 @@ export const verificarTelefonoHuesped = async (req, res, next) => {
 			return res.status(404).json({ error: "Huésped no encontrado" });
 		}
 
-		const normalizar = (t) => String(t).replace(/[\s\-().+]/g, "");
+		const normalizar = (t) => {
+			const digits = String(t).replace(/\D/g, "");
+			return digits.replace(/^549/, "54");
+		};
 		if (normalizar(huesped.telefono) !== normalizar(telefono)) {
 			return res.status(401).json({ error: "El teléfono no coincide" });
 		}

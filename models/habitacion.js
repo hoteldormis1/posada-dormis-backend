@@ -20,6 +20,11 @@ export const Habitacion = sequelize.define(
 			allowNull: false,
 			unique: true,
 		},
+		fueraDeServicio: {
+			type: DataTypes.BOOLEAN,
+			allowNull: false,
+			defaultValue: false,
+		},
 	},
 	{
 		tableName: "Habitacion",

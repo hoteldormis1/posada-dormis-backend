@@ -1,89 +1,102 @@
-# 📘 Documentación de la API
+# Backend - Posada Dormis API
 
----
+API REST para autenticacion, gestion de usuarios, huespedes, habitaciones y reservas.
 
-## 🌐 Rutas Públicas (sin autenticación)
+## Responsabilidad del modulo
 
-### Auth
+- Exponer endpoints HTTP bajo `/api`.
+- Aplicar reglas de negocio del dominio.
+- Persistir datos en PostgreSQL.
+- Emitir eventos y notificaciones (WebSocket + email).
 
-| Método | Ruta                 | Descripción                                        |
-|--------|----------------------|----------------------------------------------------|
-| POST   | `/api/auth/login`    | Iniciar sesión, devuelve `accessToken` y cookie de `refreshToken` |
-| POST   | `/api/auth/refresh`  | Refrescar `accessToken` usando cookie             |
-| POST   | `/api/auth/logout`   | Cerrar sesión (elimina cookie)                    |
-| POST   | `/api/auth/register` | Registrar nuevo usuario                           |
+## Tecnologias
 
-### Reservas Públicas
+- Node.js + Express
+- Sequelize
+- PostgreSQL
+- JWT (access/refresh)
+- WebSocket (`ws`)
 
-| Método | Ruta                                       | Descripción                                        |
-|--------|--------------------------------------------|----------------------------------------------------|
-| GET    | `/api/public/habitaciones/disponibles`     | Buscar habitaciones disponibles por rango de fechas. Query params: `fechaInicio` (YYYY-MM-DD) y `fechaFin` (YYYY-MM-DD) |
-| POST   | `/api/public/reservas`                     | Crear reserva pública (estado: pendiente). Body: `{ huesped: { nombre, apellido, dni, telefono, email, origen }, idHabitacion, fechaDesde, fechaHasta }` |
+## Requisitos
 
----
+- Node.js 18 o superior
+- Base PostgreSQL disponible
+- Variables de entorno completas
 
-## 👤 Usuarios
+## Configuracion de entorno
 
-| Método | Ruta                    | Descripción                 |
-|--------|-------------------------|-----------------------------|
-| GET    | `/api/usuarios`         | Listar todos los usuarios   |
-| DELETE | `/api/usuarios/:id`     | Eliminar usuario por id     |
+Crear `backend/.env`:
 
----
+```env
+PORT=4000
+URL=http://localhost:4000
+DATABASE_URL=postgresql://usuario:password@localhost:5432/tu_db
+NODE_ENV=development
+FRONTEND_URL=http://localhost:3000
+JWT_SECRET_ACCESS=replace_me
+JWT_SECRET_REFRESH=replace_me
+JWT_EXPIRATION_ACCESS=15m
+JWT_EXPIRATION_REFRESH=1d
+```
 
-## 👥 Tipos de Usuario
+## Ejecucion
 
-| Método | Ruta                      | Descripción                   |
-|--------|---------------------------|-------------------------------|
-| GET    | `/api/tipoUsuarios`       | Listar todos los tipos de usuario |
+```bash
+cd backend
+npm install
+npm run dev
+```
 
----
+Al iniciar, el servidor ejecuta sincronizacion de esquema y datos base (roles/estados por defecto).
 
-## 🏨 Habitaciones
+## Scripts disponibles
 
-| Método | Ruta                         | Descripción                           |
-|--------|------------------------------|---------------------------------------|
-| GET    | `/api/habitaciones`          | Listar todas las habitaciones         |
-| GET    | `/api/habitaciones/:id`      | Obtener detalle de una habitación     |
-| POST   | `/api/habitaciones`          | Crear nueva habitación                |
-| PUT    | `/api/habitaciones/:id`      | Actualizar habitación existente       |
-| DELETE | `/api/habitaciones/:id`      | Eliminar habitación por id            |
+- `npm run dev`: desarrollo con nodemon.
+- `npm start`: arranque equivalente con nodemon.
 
----
+## Estructura recomendada para lectura
 
-## 🚪 Estados de Habitación
+- `models/`: estructura de datos y asociaciones.
+- `controllers/`: logica de negocio y validaciones.
+- `routes/`: contrato HTTP por recurso.
+- `middlewares/`: auth, permisos, auditoria, rate limit.
+- `helpers/`: funciones reutilizables (emails, contable, dashboard, etc.).
 
-| Método | Ruta                             | Descripción                         |
-|--------|----------------------------------|-------------------------------------|
-| GET    | `/api/estadoReservas`        | Listar todos los estados de habitación |
+## Endpoints principales
 
----
+### Publicos
 
-## 🛏️ Tipos de Habitación
+- `POST /api/auth/login`
+- `POST /api/auth/refresh`
+- `POST /api/auth/register`
+- `POST /api/auth/logout`
+- `GET /api/public/habitaciones/disponibles`
+- `POST /api/public/reservas`
+- `GET /api/public/reservas/confirmar`
+- `GET /api/public/reservas/cancelar-pendiente`
+- `POST /api/public/huespedes/buscar-dni`
+- `POST /api/public/huespedes/verificar-telefono`
 
-| Método | Ruta                              | Descripción                         |
-|--------|-----------------------------------|-------------------------------------|
-| GET    | `/api/tipoHabitaciones`           | Listar todos los tipos de habitación |
-| GET    | `/api/tipoHabitaciones/:id`       | Obtener detalle de un tipo          |
+### Protegidos por JWT
 
----
+- `GET /api/usuarios`, `GET /api/usuarios/me`, `POST /api/usuarios/invite`, `DELETE /api/usuarios/:id`
+- `GET /api/tipoUsuarios`
+- `GET/POST/PUT/DELETE /api/huespedes`
+- `GET/POST/PUT/DELETE /api/habitaciones`
+- `GET/POST/PUT/DELETE /api/tipoHabitacion`
+- `GET/POST /api/estadoReserva`
+- `GET/POST/PUT/DELETE /api/reservas` y acciones de estado (`confirmar`, `checkin`, `checkout`, `cancelar`, `rechazar`)
+- `GET /api/dashboards/summary`
+- `GET /api/contable/resumen`, `GET /api/contable/exportar`, `GET /api/contable/ocupacion`
 
-## 🧳 Huéspedes
+## Reglas de negocio relevantes
 
-| Método | Ruta                     | Descripción                        |
-|--------|--------------------------|------------------------------------|
-| GET    | `/api/huespedes`         | Listar todos los huéspedes         |
-| GET    | `/api/huespedes/:id`     | Obtener un huésped por id          |
-| POST   | `/api/huespedes`         | Crear nuevo huésped                |
+- No se admiten reservas solapadas por habitacion.
+- `fechaHasta` debe ser posterior a `fechaDesde`.
+- Validacion de DNI en lista de huespedes no deseados.
+- Manejo de estados de reserva y transiciones segun flujo operativo.
+- Auditoria de acciones relevantes.
 
----
+## Nota de documentacion
 
-## 📅 Reservas
-
-| Método | Ruta                           | Descripción                            |
-|--------|--------------------------------|----------------------------------------|
-| GET    | `/api/reservas`               | Listar todas las reservas              |
-| GET    | `/api/reservas/calendar`      | Obtener fechas totalmente ocupadas     |
-| POST   | `/api/reservas`               | Crear nueva reserva                    |
-| PUT    | `/api/reservas/:id`           | Actualizar reserva por id              |
-| DELETE | `/api/reservas/:id`           | Eliminar reserva por id                |
+Actualmente no se incluye `swagger.json` en el repositorio. Este README actua como referencia funcional de la API.

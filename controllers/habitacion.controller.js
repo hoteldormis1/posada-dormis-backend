@@ -3,6 +3,7 @@ import { TipoHabitacion } from "../models/tipoHabitacion.js";
 import { Reserva } from "../models/reserva.js";
 import { Op, Sequelize, QueryTypes } from "sequelize";
 import { sequelize } from "../db.js";
+import { broadcast } from "../ws.js";
 
 // GET /habitaciones
 export const getAllHabitaciones = async (req, res, next) => {
@@ -51,6 +52,7 @@ export const getAllHabitaciones = async (req, res, next) => {
 			numero: h.numero,
 			precio: h.TipoHabitacion?.precio ?? null,
 			tipo: h.TipoHabitacion?.nombre ?? null,
+			fueraDeServicio: h.fueraDeServicio,
 		}));
 
 		res.json({
@@ -87,6 +89,7 @@ export const getHabitacionesDisponiblesPorDia = async (req, res, next) => {
       FROM "Habitacion" h
       LEFT JOIN occupied o ON o."idHabitacion" = h."idHabitacion"
       WHERE o."idHabitacion" IS NULL
+        AND COALESCE(h."fueraDeServicio", false) = false
       ORDER BY h."idHabitacion";
     `;
 		const rooms = await sequelize.query(sql, {
@@ -142,6 +145,7 @@ export const getHabitacionesDisponiblesPublico = async (req, res, next) => {
 		INNER JOIN "TipoHabitacion" th ON th."idTipoHabitacion" = h."idTipoHabitacion"
 		LEFT JOIN occupied o ON o."idHabitacion" = h."idHabitacion"
 		WHERE o."idHabitacion" IS NULL
+		  AND COALESCE(h."fueraDeServicio", false) = false
 		ORDER BY th."precio", h."numero";
 	`;
 
@@ -163,7 +167,7 @@ export const getHabitacionesDisponiblesPublico = async (req, res, next) => {
 
 // POST /habitaciones
 export const createHabitacion = async (req, res, next) => {
-	const { idTipoHabitacion, numero } = req.body;
+	const { idTipoHabitacion, numero, fueraDeServicio } = req.body;
 	try {
 		const nombre = await TipoHabitacion.findByPk(idTipoHabitacion);
 		if (!nombre) {
@@ -173,6 +177,7 @@ export const createHabitacion = async (req, res, next) => {
 		const nueva = await Habitacion.create({
 			idTipoHabitacion,
 			numero,
+			fueraDeServicio: typeof fueraDeServicio === "boolean" ? fueraDeServicio : false,
 		});
 		res.status(201).json(nueva);
 	} catch (err) {
@@ -186,7 +191,7 @@ export const createHabitacion = async (req, res, next) => {
 
 // PUT /habitaciones/:id
 export const updateHabitacion = async (req, res, next) => {
-	const { idTipoHabitacion, numero } = req.body;
+	const { idTipoHabitacion, numero, fueraDeServicio } = req.body;
 	try {
 		const h = await Habitacion.findByPk(req.params.id);
 		if (!h) return res.status(404).json({ error: "No existe habitación" });
@@ -202,6 +207,9 @@ export const updateHabitacion = async (req, res, next) => {
 		if (numero !== undefined) {
 			h.numero = numero;
 		}
+		if (fueraDeServicio !== undefined) {
+			h.fueraDeServicio = Boolean(fueraDeServicio);
+		}
 
 		await h.save();
 		res.json(h);
@@ -210,6 +218,32 @@ export const updateHabitacion = async (req, res, next) => {
 		if (err.name === "SequelizeValidationError") {
 			return res.status(400).json({ error: err.errors.map((e) => e.message) });
 		}
+		next(err);
+	}
+};
+
+// PUT /habitaciones/:id/fuera-de-servicio
+export const toggleFueraDeServicio = async (req, res, next) => {
+	try {
+		const h = await Habitacion.findByPk(req.params.id);
+		if (!h) return res.status(404).json({ error: "No existe habitación" });
+
+		h.fueraDeServicio = !h.fueraDeServicio;
+		await h.save();
+
+		broadcast("habitacion_actualizada", {
+			idHabitacion: h.idHabitacion,
+			numero: h.numero,
+			fueraDeServicio: h.fueraDeServicio,
+		});
+
+		res.json({
+			idHabitacion: h.idHabitacion,
+			numero: h.numero,
+			fueraDeServicio: h.fueraDeServicio,
+		});
+	} catch (err) {
+		console.error(`Error al cambiar estado de servicio de habitación ${req.params.id}:`, err);
 		next(err);
 	}
 };

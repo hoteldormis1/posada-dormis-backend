@@ -1,7 +1,7 @@
 // controllers/dashboard.controller.js (ESM, tidy + validations)
 
 /**
- * @file Endpoints de Dashboard: summary y telemetry
+ * @file Endpoint de Dashboard summary
  */
 
 import {
@@ -61,6 +61,8 @@ export async function getDashboardSummary(req, res, next) {
       totals: {
         telemetria,
         reservas: totals.reservasTotal,
+        huespedes: totals.huespedesTotal,
+        nochesPromedioEstadia: +Number(totals.nochesPromedioEstadia || 0).toFixed(2),
         ventas: totals.ventasTotal,
         montoPagado: totals.montoPagado,
         montoTotal: totals.montoTotal,
@@ -71,40 +73,6 @@ export async function getDashboardSummary(req, res, next) {
       },
       lastUpdated: new Date().toISOString(),
     });
-  } catch (err) {
-    return next(err);
-  }
-}
-
-/**
- * Telemetría del dashboard (series por bucket): reservas y ventas con sumas.
- *
- * @route GET /dashboard/telemetry
- * @query {string} [from] ISO YYYY-MM-DD (inicio). Default: hoy-29 días.
- * @query {string} [to]   ISO YYYY-MM-DD (fin).    Default: hoy.
- * @query {'day'|'week'|'month'|'year'} [agruparPor='day'] Granularidad si no se usa bucketDays.
- * @query {'pagado'|'estado'} [ventaBy='pagado'] Cómo contar “ventas”.
- * @query {number} [bucketDays] Tamaño fijo del bucket en días.
- * @query {'auto'|'month'|'monthShort'|'year'|'date'|'dateShort'|'weekRange'|'range'} [label='auto'] Formato de etiqueta.
- * @query {string} [locale='es-AR'] Locale para etiquetas.
- * @returns {Object} { agruparPor, reservas[], ventas[] }
- */
-export async function getDashboardTelemetry(req, res, next) {
-  try {
-    const { from, to } = req.query;
-    const { agruparPor, ventaBy, label, locale, nBucket } = sanitizeArgs(req.query);
-
-    if (req.query.bucketDays !== undefined && Number.isNaN(nBucket)) {
-      return res.status(400).json({ error: 'bucketDays debe ser un número' });
-    }
-
-    const { start, end } = normalizeRange(from, to);
-
-    const telemetria = await getTelemetry({
-      start, end, agruparPor, ventaBy, bucketDays: nBucket, label, locale,
-    });
-
-    return res.json(telemetria);
   } catch (err) {
     return next(err);
   }
