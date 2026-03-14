@@ -31,7 +31,8 @@ export const EstadoReserva = sequelize.define(
 	},
 	{
 		tableName: "EstadoReserva",
-		timestamps: false,
+		timestamps: true,
+		paranoid: true,
 		indexes: [
 			{
 				unique: true,

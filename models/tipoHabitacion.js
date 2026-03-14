@@ -22,6 +22,7 @@ export const TipoHabitacion = sequelize.define(
 	},
 	{
 		tableName: "TipoHabitacion",
-		timestamps: false,
+		timestamps: true,
+		paranoid: true,
 	}
 );

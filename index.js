@@ -7,6 +7,7 @@ import cookieParser from "cookie-parser";
 import morgan from "morgan";
 import { sequelize } from "./db.js";
 import routes from "./routes/index.js";
+import { errorHandler } from "./middlewares/errorHandler.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import {
@@ -41,6 +42,8 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 app.use("/api", routes);
+
+app.use(errorHandler);
 
 const port = Number(process.env.PORT) || 4000;
 
