@@ -75,18 +75,17 @@ export async function getResumenContable({ start, end, estadoNombres = [] }) {
       Number(totalesGenerales?.montoTotal || 0) - Number(totalesGenerales?.montoPagado || 0),
   };
 
-  // Serie diaria de reservas por fecha
-  // TO_CHAR garantiza que pg devuelva un string 'YYYY-MM-DD' en lugar de un Date object
+  // Serie diaria agrupada por fecha de creación (createdAt)
   const porFecha = await Reserva.findAll({
     attributes: [
-      [literal(`TO_CHAR("fechaDesde" AT TIME ZONE 'UTC', 'YYYY-MM-DD')`), 'fecha'],
+      [literal(`TO_CHAR("createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD')`), 'fecha'],
       [fn('COUNT', col('idReserva')), 'cantidad'],
     ],
     where: {
-      fechaDesde: { [Op.between]: [start, end] },
+      createdAt: { [Op.between]: [start, end] },
     },
-    group: [literal(`TO_CHAR("fechaDesde" AT TIME ZONE 'UTC', 'YYYY-MM-DD')`)],
-    order: [[literal(`TO_CHAR("fechaDesde" AT TIME ZONE 'UTC', 'YYYY-MM-DD')`), 'ASC']],
+    group: [literal(`TO_CHAR("createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD')`)],
+    order: [[literal(`TO_CHAR("createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD')`), 'ASC']],
     raw: true,
   });
 
@@ -155,6 +154,7 @@ export async function getReservasParaExportar({ start, end, estadoNombre, estado
 
   return reservas.map((r) => ({
     idReserva: r.idReserva,
+    createdAt: r.createdAt || null,
     huesped: `${r.Huesped?.nombre || ''} ${r.Huesped?.apellido || ''}`.trim(),
     dni: r.Huesped?.dni || '',
     telefono: r.Huesped?.telefono || '',

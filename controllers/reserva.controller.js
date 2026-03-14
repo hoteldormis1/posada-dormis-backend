@@ -99,6 +99,7 @@ export const getAllReservas = async (req, res, next) => {
 			idReserva: r.idReserva,
 			idHuesped: r.idHuesped,
 			idHabitacion: r.idHabitacion,
+			createdAt: r.createdAt ? r.createdAt.toISOString() : null,
 			fechaDesde: r.fechaDesde ? r.fechaDesde.toISOString().slice(0, 10) : null,
 			fechaHasta: r.fechaHasta ? r.fechaHasta.toISOString().slice(0, 10) : null,
 			numeroHab: r.Habitacion?.numero ?? "-",

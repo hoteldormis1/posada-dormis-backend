@@ -6,7 +6,8 @@ import { sequelize } from '../db.js';
 // Config
 export const GRAN_MAP = { day: 'day', week: 'week', month: 'month', year: 'year' };
 export const ESTADOS_VENTA_IDS = []; // p.ej. [2,3] si contás ventas por estado
-let timelineColumnCache = null;
+// createdAt existe en todas las tablas desde la migración de timestamps
+const TIMELINE_COLUMN = 'createdAt';
 
 // ─────────────────────────── Utils de fecha ───────────────────────────
 export function parseDateISO(d) {
@@ -42,20 +43,8 @@ export function whereVenta(baseWhere, ventaBy) {
     return { ...baseWhere, montoPagado: { [Op.gt]: 0 } };
 }
 
-async function resolveTimelineColumn() {
-    if (timelineColumnCache) return timelineColumnCache;
-
-    try {
-        const qi = sequelize.getQueryInterface();
-        const cols = await qi.describeTable('Reserva');
-        const candidates = ['fechaCreacion', 'createdAt', 'created_at'];
-        const found = candidates.find((c) => Object.prototype.hasOwnProperty.call(cols, c));
-        timelineColumnCache = found || 'fechaDesde';
-    } catch {
-        timelineColumnCache = 'fechaDesde';
-    }
-
-    return timelineColumnCache;
+function resolveTimelineColumn() {
+    return TIMELINE_COLUMN;
 }
 
 function buildTimelineWhere(start, end, timelineColumn) {
@@ -140,7 +129,7 @@ export function bucketExprOn({ agruparPor, bucketDays, originIso, tsExpr }) {
 
 // ───────────────────────────── Servicios/aggregations ─────────────────────────────
 export async function getTotals({ start, end, ventaBy }) {
-    const timelineColumn = await resolveTimelineColumn();
+    const timelineColumn = resolveTimelineColumn();
     const whereAll = buildTimelineWhere(start, end, timelineColumn);
     const reservasTotal = await Reserva.count({ where: whereAll });
 
@@ -191,7 +180,7 @@ export async function getTelemetry({
     locale = 'es-AR',
 }) {
     const originIso = start.toISOString();
-    const timelineColumn = await resolveTimelineColumn();
+    const timelineColumn = resolveTimelineColumn();
 
     const bucketSQL = bucketExprOn({
         agruparPor,
