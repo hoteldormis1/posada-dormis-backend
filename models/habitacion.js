@@ -28,7 +28,8 @@ export const Habitacion = sequelize.define(
 	},
 	{
 		tableName: "Habitacion",
-		timestamps: false,
+		timestamps: true,
+		paranoid: true, // Soft delete: agrega columna deletedAt; destroy() no borra físicamente
 	}
 );
 

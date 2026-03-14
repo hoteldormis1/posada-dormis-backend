@@ -4,6 +4,7 @@ import { Reserva } from "../models/reserva.js";
 import { Op, Sequelize, QueryTypes } from "sequelize";
 import { sequelize } from "../db.js";
 import { broadcast } from "../ws.js";
+import { notFound, entityInUse, AppError, ERROR_CODES } from "../errors/AppError.js";
 
 // GET /habitaciones
 export const getAllHabitaciones = async (req, res, next) => {
@@ -82,6 +83,7 @@ export const getHabitacionesDisponiblesPorDia = async (req, res, next) => {
         JOIN "EstadoReserva" er ON er."idEstadoReserva" = r."idEstadoReserva"
         WHERE r."fechaDesde"::date <= :day::date
           AND r."fechaHasta"::date >= :day::date
+          AND r."deletedAt" IS NULL
           AND LOWER(er."nombre") NOT IN ('cancelada', 'rechazada')
         GROUP BY r."idHabitacion"
       )
@@ -89,6 +91,7 @@ export const getHabitacionesDisponiblesPorDia = async (req, res, next) => {
       FROM "Habitacion" h
       LEFT JOIN occupied o ON o."idHabitacion" = h."idHabitacion"
       WHERE o."idHabitacion" IS NULL
+        AND h."deletedAt" IS NULL
         AND COALESCE(h."fueraDeServicio", false) = false
       ORDER BY h."idHabitacion";
     `;
@@ -133,6 +136,7 @@ export const getHabitacionesDisponiblesPublico = async (req, res, next) => {
 			JOIN "EstadoReserva" er ON er."idEstadoReserva" = r."idEstadoReserva"
 			WHERE r."fechaDesde"::date < :fechaFin::date
 			  AND r."fechaHasta"::date > :fechaInicio::date
+			  AND r."deletedAt" IS NULL
 			  AND LOWER(er."nombre") NOT IN ('cancelada', 'rechazada')
 		)
 		SELECT 
@@ -145,6 +149,8 @@ export const getHabitacionesDisponiblesPublico = async (req, res, next) => {
 		INNER JOIN "TipoHabitacion" th ON th."idTipoHabitacion" = h."idTipoHabitacion"
 		LEFT JOIN occupied o ON o."idHabitacion" = h."idHabitacion"
 		WHERE o."idHabitacion" IS NULL
+		  AND h."deletedAt" IS NULL
+		  AND th."deletedAt" IS NULL
 		  AND COALESCE(h."fueraDeServicio", false) = false
 		ORDER BY th."precio", h."numero";
 	`;
@@ -169,10 +175,8 @@ export const getHabitacionesDisponiblesPublico = async (req, res, next) => {
 export const createHabitacion = async (req, res, next) => {
 	const { idTipoHabitacion, numero, fueraDeServicio } = req.body;
 	try {
-		const nombre = await TipoHabitacion.findByPk(idTipoHabitacion);
-		if (!nombre) {
-			return res.status(400).json({ error: "Tipo de habitación no válido" });
-		}
+		const tipo = await TipoHabitacion.findByPk(idTipoHabitacion);
+		if (!tipo) throw new AppError(ERROR_CODES.VALIDATION_ERROR, 400, "Tipo de habitación no válido.");
 
 		const nueva = await Habitacion.create({
 			idTipoHabitacion,
@@ -181,10 +185,6 @@ export const createHabitacion = async (req, res, next) => {
 		});
 		res.status(201).json(nueva);
 	} catch (err) {
-		console.error("Error creando habitación:", err);
-		if (err.name === "SequelizeValidationError") {
-			return res.status(400).json({ error: err.errors.map((e) => e.message) });
-		}
 		next(err);
 	}
 };
@@ -194,30 +194,19 @@ export const updateHabitacion = async (req, res, next) => {
 	const { idTipoHabitacion, numero, fueraDeServicio } = req.body;
 	try {
 		const h = await Habitacion.findByPk(req.params.id);
-		if (!h) return res.status(404).json({ error: "No existe habitación" });
+		if (!h) throw notFound("Habitación");
 
 		if (idTipoHabitacion !== undefined) {
-			const nombre = await TipoHabitacion.findByPk(idTipoHabitacion);
-			if (!nombre) {
-				return res.status(400).json({ error: "Tipo de habitación no válido" });
-			}
+			const tipo = await TipoHabitacion.findByPk(idTipoHabitacion);
+			if (!tipo) throw new AppError(ERROR_CODES.VALIDATION_ERROR, 400, "Tipo de habitación no válido.");
 			h.idTipoHabitacion = idTipoHabitacion;
 		}
-
-		if (numero !== undefined) {
-			h.numero = numero;
-		}
-		if (fueraDeServicio !== undefined) {
-			h.fueraDeServicio = Boolean(fueraDeServicio);
-		}
+		if (numero !== undefined) h.numero = numero;
+		if (fueraDeServicio !== undefined) h.fueraDeServicio = Boolean(fueraDeServicio);
 
 		await h.save();
 		res.json(h);
 	} catch (err) {
-		console.error(`Error actualizando habitación ${req.params.id}:`, err);
-		if (err.name === "SequelizeValidationError") {
-			return res.status(400).json({ error: err.errors.map((e) => e.message) });
-		}
 		next(err);
 	}
 };
@@ -226,7 +215,7 @@ export const updateHabitacion = async (req, res, next) => {
 export const toggleFueraDeServicio = async (req, res, next) => {
 	try {
 		const h = await Habitacion.findByPk(req.params.id);
-		if (!h) return res.status(404).json({ error: "No existe habitación" });
+		if (!h) throw notFound("Habitación");
 
 		h.fueraDeServicio = !h.fueraDeServicio;
 		await h.save();
@@ -243,7 +232,6 @@ export const toggleFueraDeServicio = async (req, res, next) => {
 			fueraDeServicio: h.fueraDeServicio,
 		});
 	} catch (err) {
-		console.error(`Error al cambiar estado de servicio de habitación ${req.params.id}:`, err);
 		next(err);
 	}
 };
@@ -252,31 +240,14 @@ export const toggleFueraDeServicio = async (req, res, next) => {
 export const deleteHabitacion = async (req, res, next) => {
 	try {
 		const h = await Habitacion.findByPk(req.params.id);
-		if (!h) return res.status(404).json({ error: "No existe habitación" });
+		if (!h) throw notFound("Habitación");
 
-		// Verificar si existen reservas asociadas a esta habitación
-		const reservasCount = await Reserva.count({
-			where: { idHabitacion: req.params.id }
-		});
-
-		if (reservasCount > 0) {
-			return res.status(400).json({
-				error: `No se puede eliminar la habitación porque tiene ${reservasCount} reserva${reservasCount > 1 ? 's' : ''} asociada${reservasCount > 1 ? 's' : ''}. Por favor, elimine primero las reservas.`
-			});
-		}
+		const reservasCount = await Reserva.count({ where: { idHabitacion: req.params.id } });
+		if (reservasCount > 0) throw entityInUse("la habitación", reservasCount, "reserva");
 
 		await h.destroy();
 		res.status(204).end();
 	} catch (err) {
-		console.error(`Error eliminando habitación ${req.params.id}:`, err);
-
-		// Manejar específicamente errores de foreign key
-		if (err.name === 'SequelizeForeignKeyConstraintError') {
-			return res.status(400).json({
-				error: 'No se puede eliminar la habitación porque tiene reservas asociadas. Por favor, elimine primero las reservas.'
-			});
-		}
-
 		next(err);
 	}
 };

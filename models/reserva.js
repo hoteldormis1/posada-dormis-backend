@@ -45,7 +45,8 @@ export const Reserva = sequelize.define(
 	},
 	{
 		tableName: "Reserva",
-		timestamps: false,
+		timestamps: true,
+		paranoid: true,
 	}
 );
 

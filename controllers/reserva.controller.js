@@ -5,6 +5,7 @@ import { EstadoReserva } from "../models/estadoReserva.js";
 import { sequelize } from "../db.js";
 import { Op, QueryTypes } from "sequelize";
 import { TipoHabitacion } from "../models/tipoHabitacion.js";
+import { AppError, ERROR_CODES, notFound, dniExists } from "../errors/AppError.js";
 import { isDniBlacklisted } from "./huespedNoDeseado.controller.js";
 import {
 	enviarEmailAprobacion,
@@ -170,7 +171,8 @@ export const getReservasCalendar = async (req, res, next) => {
         h."numero" AS "numero",
         ('Habitación ' || h."numero") AS "name"
       FROM "Habitacion" h
-      ${usarFiltroHabit ? 'WHERE h."numero" IN (:numeros)' : ''}
+      WHERE h."deletedAt" IS NULL
+      ${usarFiltroHabit ? 'AND h."numero" IN (:numeros)' : ''}
       ORDER BY h."numero";
     `;
 		const rooms = await sequelize.query(roomsSql, {
@@ -221,10 +223,11 @@ export const getReservasCalendar = async (req, res, next) => {
         r."montoPagado" AS "montoPagado",
         LOWER(er."nombre") AS "status"
       FROM "Reserva" r
-      JOIN "Habitacion" h ON h."idHabitacion" = r."idHabitacion"
-      JOIN "Huesped" hp ON hp."idHuesped" = r."idHuesped"
+      JOIN "Habitacion" h ON h."idHabitacion" = r."idHabitacion" AND h."deletedAt" IS NULL
+      LEFT JOIN "Huesped" hp ON hp."idHuesped" = r."idHuesped"
       JOIN "EstadoReserva" er ON er."idEstadoReserva" = r."idEstadoReserva"
-      WHERE ${baseOverlap}
+      WHERE r."deletedAt" IS NULL
+        AND ${baseOverlap}
       ${usarFiltroHabit ? 'AND h."numero" IN (:numeros)' : ''}
       ORDER BY r."fechaDesde", r."idReserva";
     `;
@@ -259,7 +262,8 @@ export const getReservasCalendar = async (req, res, next) => {
                          AND date_trunc('day', r."fechaHasta")
        AND r."fechaDesde" < (:endDate::date + INTERVAL '1 day')
        AND r."fechaHasta" > :startDate::date
-      JOIN "Habitacion" h ON h."idHabitacion" = r."idHabitacion"
+       AND r."deletedAt" IS NULL
+      JOIN "Habitacion" h ON h."idHabitacion" = r."idHabitacion" AND h."deletedAt" IS NULL
       LEFT JOIN "EstadoReserva" er ON er."idEstadoReserva" = r."idEstadoReserva"
       ${usarFiltroHabit ? 'AND h."numero" IN (:numeros)' : ""}
       ${estadoWhere.length ? `AND ${estadoWhere.join(" AND ")}` : ""}
@@ -403,19 +407,10 @@ export const createReserva = async (req, res, next) => {
 			if (missing.length) {
 				return res.status(400).json({ error: `Faltan datos para crear huésped: ${missing.join(", ")}` });
 			}
-			// Buscar huésped existente por DNI antes de crear (evita duplicados)
+			// Si el DNI ya existe, no silenciar ni reutilizar: informar al admin para que use "huésped existente"
 			let huespedExistente = await Huesped.findOne({ where: { dni: huespedData.dni } });
 			if (huespedExistente) {
-				return res.status(409).json({
-					error: `El DNI ${huespedData.dni} ya está registrado para ${huespedExistente.nombre} ${huespedExistente.apellido}. Usá el modo "Huésped existente" para seleccionarlo.`,
-					code: "DNI_EXISTS",
-					huespedExistente: {
-						idHuesped: huespedExistente.idHuesped,
-						nombre: huespedExistente.nombre,
-						apellido: huespedExistente.apellido,
-						dni: huespedExistente.dni,
-					},
-				});
+				throw dniExists(huespedData.dni, huespedExistente.nombre, huespedExistente.apellido, huespedExistente.idHuesped);
 			} else {
 				const nuevo = await Huesped.create({
 					dni: huespedData.dni,
@@ -473,14 +468,7 @@ export const createReserva = async (req, res, next) => {
 
 		return res.status(201).json(reservaCompleta);
 	} catch (err) {
-		console.error("Error al crear reserva:", err);
-		if (err.name === "SequelizeValidationError" || err.name === "SequelizeForeignKeyConstraintError") {
-			return res.status(400).json({ error: err.errors.map((e) => e.message) });
-		}
-		if (err.name === "SequelizeUniqueConstraintError") {
-			return res.status(409).json({ error: "Ya existe un huésped con ese DNI.", code: "DNI_DUPLICADO" });
-		}
-		return next(err);
+		next(err);
 	}
 };
 
@@ -523,14 +511,7 @@ export const updateReserva = async (req, res, next) => {
 		await r.update(req.body);
 		return res.json(r);
 	} catch (err) {
-		console.error(`Error al actualizar reserva ${req.params.id}:`, err);
-		if (
-			err.name === "SequelizeValidationError" ||
-			err.name === "SequelizeForeignKeyConstraintError"
-		) {
-			return res.status(400).json({ error: err.errors.map((e) => e.message) });
-		}
-		return next(err);
+		next(err);
 	}
 };
 
@@ -988,11 +969,7 @@ export const createReservaPublica = async (req, res, next) => {
 			email: huespedData.email,
 		});
 	} catch (err) {
-		console.error("Error al crear reserva pública:", err);
-		if (err.name === "SequelizeValidationError" || err.name === "SequelizeForeignKeyConstraintError") {
-			return res.status(400).json({ error: err.errors.map((e) => e.message) });
-		}
-		return next(err);
+		next(err);
 	}
 };
 

@@ -192,7 +192,7 @@ export async function getOcupacionPorFecha({ start, end }) {
       )::date AS fecha
     ),
     total_hab AS (
-      SELECT COUNT(*) AS total FROM "Habitacion"
+      SELECT COUNT(*) AS total FROM "Habitacion" WHERE "deletedAt" IS NULL
     ),
     ocupados AS (
       SELECT
@@ -202,6 +202,7 @@ export async function getOcupacionPorFecha({ start, end }) {
       LEFT JOIN "Reserva" r
         ON r."fechaDesde"::date <= d.fecha
        AND r."fechaHasta"::date >= d.fecha
+       AND r."deletedAt" IS NULL
       GROUP BY d.fecha
     )
     SELECT

@@ -26,5 +26,6 @@ export const HuespedNoDeseado = sequelize.define(
 	{
 		tableName: "HuespedNoDeseado",
 		timestamps: true,
+		paranoid: true,
 	}
 );

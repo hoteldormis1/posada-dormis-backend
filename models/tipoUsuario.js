@@ -41,8 +41,9 @@ export const TipoUsuario = sequelize.define(
 		prioridad: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 100 },
 	},
 	{
-		tableName: "TipoUsuario",    // 👈 evita problemas de case
-		timestamps: false,
+		tableName: "TipoUsuario",
+		timestamps: true,
+		paranoid: true,
 		freezeTableName: true,
 		indexes: [{ unique: true, fields: ["nombre"] }],
 	}
