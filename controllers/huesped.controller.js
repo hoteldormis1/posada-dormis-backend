@@ -41,6 +41,11 @@ export const createHuesped = async (req, res, next) => {
 	}
 
 	try {
+		const existente = await Huesped.findOne({ where: { dni: req.body.dni } });
+		if (existente) {
+			return res.status(409).json({ error: "Ya existe un huésped con ese DNI." });
+		}
+
 		const nuevo = await Huesped.create(req.body);
 		res.status(201).json(nuevo);
 	} catch (err) {

@@ -21,6 +21,7 @@ export const Huesped = sequelize.define(
 		dni: {
 			type: DataTypes.INTEGER,
 			allowNull: false,
+			unique: true,
 		},
 		telefono: {
 			type: DataTypes.STRING,
