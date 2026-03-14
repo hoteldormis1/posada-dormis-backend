@@ -1,6 +1,7 @@
 import { Reserva } from "../models/reserva.js";
 import { Habitacion } from "../models/habitacion.js";
 import { Huesped } from "../models/huesped.js";
+import { EstadoReserva } from "../models/estadoReserva.js";
 import { sequelize } from "../db.js";
 import { Op, QueryTypes } from "sequelize";
 import { TipoHabitacion } from "../models/tipoHabitacion.js";
@@ -350,11 +351,17 @@ export const createReserva = async (req, res, next) => {
 		const dias = noches; // alias para el cálculo de montoTotal
 
 		// 🔒 0.1) CHEQUEO DE SOLAPAMIENTO (ANTES de crear huésped/hacer más trabajo)
-		// Ajustá el filtro de estados si querés ignorar reservas canceladas, etc.
-		// Por ejemplo: where: { idEstadoReserva: { [Op.in]: [1,2,3] } }
+		// Excluye reservas canceladas y rechazadas para no bloquear fechas ya liberadas.
+		const estadosInactivos = await EstadoReserva.findAll({
+			where: { nombre: { [Op.in]: ["cancelada", "rechazada"] } },
+			attributes: ["idEstadoReserva"],
+		});
+		const idsInactivos = estadosInactivos.map((e) => e.idEstadoReserva);
+
 		const reservaSolapada = await Reserva.findOne({
 			where: {
 				idHabitacion,
+				...(idsInactivos.length ? { idEstadoReserva: { [Op.notIn]: idsInactivos } } : {}),
 				[Op.and]: [
 					{ fechaDesde: { [Op.lt]: end } }, // existing.start < new.end
 					{ fechaHasta: { [Op.gt]: start } } // existing.end > new.start
@@ -396,14 +403,31 @@ export const createReserva = async (req, res, next) => {
 			if (missing.length) {
 				return res.status(400).json({ error: `Faltan datos para crear huésped: ${missing.join(", ")}` });
 			}
-			const nuevo = await Huesped.create({
-				dni: huespedData.dni,
-				telefono: huespedData.telefono,
-				origen: huespedData.origen,
-				nombre: huespedData.nombre,
-				apellido: huespedData.apellido,
-			});
-			idHuesped = nuevo.idHuesped;
+			// Buscar huésped existente por DNI antes de crear (evita duplicados)
+			let huespedExistente = await Huesped.findOne({ where: { dni: huespedData.dni } });
+			if (huespedExistente) {
+				return res.status(409).json({
+					error: `El DNI ${huespedData.dni} ya está registrado para ${huespedExistente.nombre} ${huespedExistente.apellido}. Usá el modo "Huésped existente" para seleccionarlo.`,
+					code: "DNI_EXISTS",
+					huespedExistente: {
+						idHuesped: huespedExistente.idHuesped,
+						nombre: huespedExistente.nombre,
+						apellido: huespedExistente.apellido,
+						dni: huespedExistente.dni,
+					},
+				});
+			} else {
+				const nuevo = await Huesped.create({
+					dni: huespedData.dni,
+					telefono: huespedData.telefono,
+					origen: huespedData.origen,
+					nombre: huespedData.nombre,
+					apellido: huespedData.apellido,
+					email: huespedData.email || null,
+					direccion: huespedData.direccion || null,
+				});
+				idHuesped = nuevo.idHuesped;
+			}
 		} else {
 			const exist = await Huesped.findByPk(idHuesped);
 			if (!exist) return res.status(400).json({ error: "Huésped no válido" });
@@ -452,6 +476,9 @@ export const createReserva = async (req, res, next) => {
 		console.error("Error al crear reserva:", err);
 		if (err.name === "SequelizeValidationError" || err.name === "SequelizeForeignKeyConstraintError") {
 			return res.status(400).json({ error: err.errors.map((e) => e.message) });
+		}
+		if (err.name === "SequelizeUniqueConstraintError") {
+			return res.status(409).json({ error: "Ya existe un huésped con ese DNI.", code: "DNI_DUPLICADO" });
 		}
 		return next(err);
 	}
