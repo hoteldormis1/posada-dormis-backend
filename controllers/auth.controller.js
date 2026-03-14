@@ -46,7 +46,7 @@ export async function login(req, res) {
 			return res.status(401).json({ message: "Credenciales inválidas" });
 		}
 
-		const { refreshToken } = generateTokens(user.idUsuario); // solo refresh
+		const { accessToken, refreshToken } = generateTokens(user.idUsuario);
 
 		// Primero limpiar cualquier cookie vieja
 		res.clearCookie(REFRESH_COOKIE_NAME, {
@@ -59,13 +59,13 @@ export async function login(req, res) {
 		// Luego setear la nueva cookie
 		res.cookie(REFRESH_COOKIE_NAME, refreshToken, {
 			httpOnly: true,
-			secure: IS_PROD, // requerido con SameSite=None
-			sameSite: IS_PROD ? "None" : "Lax", // Lax en dev, None en prod
-			path: REFRESH_COOKIE_PATH, // igual que en clearCookie
+			secure: IS_PROD,
+			sameSite: IS_PROD ? "None" : "Lax",
+			path: REFRESH_COOKIE_PATH,
 			maxAge: parseTimeToMs(EXP_REFRESH),
 		});
 
-		return res.status(200).json({ message: "Login exitoso" });
+		return res.status(200).json({ message: "Login exitoso", accessToken });
 	} catch (err) {
 		console.error("Error en login:", err);
 		return res.status(500).json({ message: "Error interno del servidor" });
