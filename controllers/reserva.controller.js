@@ -408,28 +408,10 @@ export const createReserva = async (req, res, next) => {
 			if (missing.length) {
 				return res.status(400).json({ error: `Faltan datos para crear huésped: ${missing.join(", ")}` });
 			}
-			// Si el DNI ya existe en un huésped activo, se mantiene el conflicto.
-			const huespedActivo = await Huesped.findOne({ where: { dni: huespedData.dni } });
-			if (huespedActivo) {
-				throw dniExists(huespedData.dni, huespedActivo.nombre, huespedActivo.apellido, huespedActivo.idHuesped);
-			}
-
-			// Si existe eliminado lógicamente, se restaura y reutiliza.
-			const huespedEliminado = await Huesped.findOne({
-				where: { dni: huespedData.dni },
-				paranoid: false,
-			});
-			if (huespedEliminado?.deletedAt) {
-				await huespedEliminado.restore();
-				await huespedEliminado.update({
-					telefono: huespedData.telefono,
-					origen: huespedData.origen,
-					nombre: huespedData.nombre,
-					apellido: huespedData.apellido,
-					email: huespedData.email || null,
-					direccion: huespedData.direccion || null,
-				});
-				idHuesped = huespedEliminado.idHuesped;
+			// Si el DNI ya existe, no silenciar ni reutilizar: informar al admin para que use "huésped existente"
+			let huespedExistente = await Huesped.findOne({ where: { dni: huespedData.dni } });
+			if (huespedExistente) {
+				throw dniExists(huespedData.dni, huespedExistente.nombre, huespedExistente.apellido, huespedExistente.idHuesped);
 			} else {
 				const nuevo = await Huesped.create({
 					dni: huespedData.dni,
@@ -505,67 +487,14 @@ export const updateReserva = async (req, res, next) => {
 	try {
 		const r = await Reserva.findByPk(req.params.id);
 		if (!r) return res.status(404).json({ error: "No existe reserva" });
-		const payload = { ...req.body };
-
-		// Permite editar reserva creando/reutilizando huésped por DNI (incluye soft-delete restore)
-		// cuando llega un bloque `huesped` desde el formulario de edición.
-		if (payload?.huesped && !payload?.idHuesped) {
-			const huespedData = payload.huesped;
-			const required = ["dni", "telefono", "origen", "nombre", "apellido"];
-			const missing = required.filter((f) => !huespedData?.[f]);
-			if (missing.length) {
-				return res.status(400).json({ error: `Faltan datos para crear huésped: ${missing.join(", ")}` });
-			}
-
-			if (await isDniBlacklisted(huespedData.dni)) {
-				return res.status(403).json({
-					error: "Este huésped se encuentra en la lista de no deseados. No se puede actualizar la reserva.",
-					code: "DNI_BLACKLISTED",
-				});
-			}
-
-			const huespedActivo = await Huesped.findOne({ where: { dni: huespedData.dni } });
-			if (huespedActivo) {
-				payload.idHuesped = huespedActivo.idHuesped;
-			} else {
-				const huespedEliminado = await Huesped.findOne({
-					where: { dni: huespedData.dni },
-					paranoid: false,
-				});
-				if (huespedEliminado?.deletedAt) {
-					await huespedEliminado.restore();
-					await huespedEliminado.update({
-						telefono: huespedData.telefono,
-						origen: huespedData.origen,
-						nombre: huespedData.nombre,
-						apellido: huespedData.apellido,
-						email: huespedData.email || null,
-						direccion: huespedData.direccion || null,
-					});
-					payload.idHuesped = huespedEliminado.idHuesped;
-				} else {
-					const nuevo = await Huesped.create({
-						dni: huespedData.dni,
-						telefono: huespedData.telefono,
-						origen: huespedData.origen,
-						nombre: huespedData.nombre,
-						apellido: huespedData.apellido,
-						email: huespedData.email || null,
-						direccion: huespedData.direccion || null,
-					});
-					payload.idHuesped = nuevo.idHuesped;
-				}
-			}
-		}
-		delete payload.huesped;
 
 		let estadoOrigenNombre = null;
 		let estadoDestinoNombre = null;
 
-		if (payload?.idEstadoReserva !== undefined) {
+		if (req.body?.idEstadoReserva !== undefined) {
 			const { EstadoReserva } = await import("../models/estadoReserva.js");
 			const estadoActual = await EstadoReserva.findByPk(r.idEstadoReserva);
-			const estadoDestino = await EstadoReserva.findByPk(Number(payload.idEstadoReserva));
+			const estadoDestino = await EstadoReserva.findByPk(Number(req.body.idEstadoReserva));
 
 			estadoOrigenNombre = String(estadoActual?.nombre || "").toLowerCase();
 			estadoDestinoNombre = String(estadoDestino?.nombre || "").toLowerCase();
@@ -581,7 +510,7 @@ export const updateReserva = async (req, res, next) => {
 			}
 		}
 
-		await r.update(payload);
+		await r.update(req.body);
 
 		// Enviar email al huésped si el estado cambió a "cancelada"
 		if (estadoDestinoNombre === "cancelada") {
@@ -597,7 +526,7 @@ export const updateReserva = async (req, res, next) => {
 							habitacion: updated.Habitacion?.numero ?? "-",
 							fechaDesde: updated.fechaDesde,
 							fechaHasta: updated.fechaHasta,
-							motivo: payload?.motivo || null,
+							motivo: req.body?.motivo || null,
 						});
 					} else {
 						await enviarEmailCancelacion({
@@ -1138,18 +1067,35 @@ export const confirmarReservaPublica = async (req, res, next) => {
 			return res.status(409).json(bloqueoHabitacion);
 		}
 
-		// --- Buscar o crear huésped ---
+		// --- Buscar o crear huésped (incluye soft-deleted) ---
 		let huesped = await Huesped.findOne({ where: { dni: huespedData.dni } });
 		if (!huesped) {
-			huesped = await Huesped.create({
-				dni: huespedData.dni,
-				telefono: huespedData.telefono,
-				origen: huespedData.origen,
-				nombre: huespedData.nombre,
-				apellido: huespedData.apellido,
-				email: huespedData.email || null,
-				direccion: huespedData.direccion || null,
+			const huespedEliminado = await Huesped.findOne({
+				where: { dni: huespedData.dni },
+				paranoid: false,
 			});
+			if (huespedEliminado?.deletedAt) {
+				await huespedEliminado.restore();
+				await huespedEliminado.update({
+					telefono: huespedData.telefono,
+					origen: huespedData.origen,
+					nombre: huespedData.nombre,
+					apellido: huespedData.apellido,
+					email: huespedData.email || null,
+					direccion: huespedData.direccion || null,
+				});
+				huesped = huespedEliminado;
+			} else {
+				huesped = await Huesped.create({
+					dni: huespedData.dni,
+					telefono: huespedData.telefono,
+					origen: huespedData.origen,
+					nombre: huespedData.nombre,
+					apellido: huespedData.apellido,
+					email: huespedData.email || null,
+					direccion: huespedData.direccion || null,
+				});
+			}
 		} else {
 			const updates = {};
 			if (huespedData.email && huespedData.email !== huesped.email) updates.email = huespedData.email;
