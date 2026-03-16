@@ -18,23 +18,41 @@ export async function inviteUsuario(req, res) {
     const tipo = await TipoUsuario.findOne({ where: { nombre: tipoUsuario } });
     if (!tipo) return res.status(404).json({ message: "Tipo de usuario no encontrado" });
 
-    let user = await Usuario.findOne({ where: { email } });
     const verifyToken = crypto.randomBytes(32).toString("hex");
     const verifyTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const tempPassword = crypto.randomBytes(12).toString("hex");
     const hashed = await bcrypt.hash(tempPassword, 10);
 
+    // Buscar usuario activo primero
+    let user = await Usuario.findOne({ where: { email } });
+
     if (!user) {
-        user = await Usuario.create({
-            nombre,
-            email,
-            clave: hashed,
-            idTipoUsuario: tipo.idTipoUsuario,
-            verificado: false,
-            verifyToken,
-            verifyTokenExpires,
-        });
+        // Buscar entre soft-deleted (paranoid: false) para restaurar en vez de chocar el constraint
+        const eliminado = await Usuario.findOne({ where: { email }, paranoid: false });
+
+        if (eliminado) {
+            eliminado.nombre = nombre;
+            eliminado.clave = hashed;
+            eliminado.idTipoUsuario = tipo.idTipoUsuario;
+            eliminado.verificado = false;
+            eliminado.verifyToken = verifyToken;
+            eliminado.verifyTokenExpires = verifyTokenExpires;
+            await eliminado.restore();
+            await eliminado.save();
+            user = eliminado;
+        } else {
+            user = await Usuario.create({
+                nombre,
+                email,
+                clave: hashed,
+                idTipoUsuario: tipo.idTipoUsuario,
+                verificado: false,
+                verifyToken,
+                verifyTokenExpires,
+            });
+        }
     } else {
+        // Re-invitar usuario activo existente
         user.nombre = nombre;
         user.idTipoUsuario = tipo.idTipoUsuario;
         user.verificado = false;
