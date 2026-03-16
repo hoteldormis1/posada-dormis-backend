@@ -112,6 +112,7 @@ export async function enviarEmailNuevaSolicitudPosada({ nombreHuesped, dniHuespe
 
 	const desde = formatFecha(fechaDesde);
 	const hasta = formatFecha(fechaHasta);
+	const adminUrl = `${process.env.FRONTEND_URL || ""}/admin/calendario`;
 
 	const html = reservaTemplateDark({
 		titulo: "Nueva solicitud para revisar",
@@ -136,7 +137,11 @@ export async function enviarEmailNuevaSolicitudPosada({ nombreHuesped, dniHuespe
 					</div>
 				`).join("")}
 			</div>
-			<p style="font-size:13px;color:rgba(255,255,255,0.45);line-height:1.6;margin:14px 0 0;">Ingresa al sistema para confirmar o rechazar esta solicitud.</p>
+			<p style="font-size:13px;color:rgba(255,255,255,0.45);line-height:1.6;margin:14px 0 0;">Ingresa al panel para confirmar o rechazar esta solicitud.</p>
+			<a href="${adminUrl}"
+			   style="display:block;width:100%;box-sizing:border-box;margin-top:14px;background:#F59E0B;color:#1a0e00;border-radius:13px;padding:14px 16px;font-size:15px;font-weight:700;text-decoration:none;text-align:center;box-shadow:0 6px 24px rgba(245,158,11,0.22);">
+				Ir al panel de administración →
+			</a>
 		`,
 	});
 

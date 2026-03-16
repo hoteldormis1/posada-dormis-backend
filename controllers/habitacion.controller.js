@@ -32,7 +32,7 @@ export const getAllHabitaciones = async (req, res, next) => {
 			}
 			: {};
 
-		// Ordenamiento dinámico (solo TipoHabitacion)
+		// Ordenamiento din?mico (solo TipoHabitacion)
 		let order;
 		if (["nombre", "precio"].includes(sortField)) {
 			order = [[{ model: TipoHabitacion, as: "TipoHabitacion" }, sortField, sortOrder]];
@@ -113,15 +113,15 @@ export const getHabitacionesDisponiblesPublico = async (req, res, next) => {
 		const { fechaInicio, fechaFin } = req.query;
 
 		if (!fechaInicio || !fechaFin) {
-			return res.status(400).json({ error: "Faltan parámetros fechaInicio y fechaFin (YYYY-MM-DD)" });
+			return res.status(400).json({ error: "Faltan par?metros fechaInicio y fechaFin (YYYY-MM-DD)" });
 		}
 
-		// Validar que las fechas sean válidas
+		// Validar que las fechas sean v?lidas
 		const inicio = new Date(fechaInicio);
 		const fin = new Date(fechaFin);
 
 		if (isNaN(inicio) || isNaN(fin)) {
-			return res.status(400).json({ error: "Formato de fecha inválido" });
+			return res.status(400).json({ error: "Formato de fecha inv?lido" });
 		}
 
 		if (fin <= inicio) {
@@ -166,7 +166,7 @@ export const getHabitacionesDisponiblesPublico = async (req, res, next) => {
 			habitaciones
 		});
 	} catch (err) {
-		console.error("Error al obtener habitaciones disponibles (público):", err);
+		console.error("Error al obtener habitaciones disponibles (p?blico):", err);
 		next(err);
 	}
 };
@@ -176,7 +176,21 @@ export const createHabitacion = async (req, res, next) => {
 	const { idTipoHabitacion, numero, fueraDeServicio } = req.body;
 	try {
 		const tipo = await TipoHabitacion.findByPk(idTipoHabitacion);
-		if (!tipo) throw new AppError(ERROR_CODES.VALIDATION_ERROR, 400, "Tipo de habitación no válido.");
+		if (!tipo) throw new AppError(ERROR_CODES.VALIDATION_ERROR, 400, "Tipo de habitaci?n no v?lido.");
+
+		// Verificar si existe una habitaci?n activa con el mismo n?mero
+		const activa = await Habitacion.findOne({ where: { numero } });
+		if (activa) throw new AppError(ERROR_CODES.CONFLICT, 409, `Ya existe una habitaci?n activa con el n?mero ${numero}.`);
+
+		// Si existe una soft-deleted con ese n?mero, restaurarla con los nuevos datos
+		const eliminada = await Habitacion.findOne({ where: { numero }, paranoid: false });
+		if (eliminada) {
+			eliminada.idTipoHabitacion = idTipoHabitacion;
+			eliminada.fueraDeServicio = typeof fueraDeServicio === "boolean" ? fueraDeServicio : false;
+			await eliminada.restore();
+			await eliminada.save();
+			return res.status(201).json(eliminada);
+		}
 
 		const nueva = await Habitacion.create({
 			idTipoHabitacion,
@@ -191,17 +205,17 @@ export const createHabitacion = async (req, res, next) => {
 
 // PUT /habitaciones/:id
 export const updateHabitacion = async (req, res, next) => {
-	const { idTipoHabitacion, numero, fueraDeServicio } = req.body;
+	const { idTipoHabitacion, fueraDeServicio } = req.body;
 	try {
 		const h = await Habitacion.findByPk(req.params.id);
-		if (!h) throw notFound("Habitación");
+		if (!h) throw notFound("Habitaci?n");
 
 		if (idTipoHabitacion !== undefined) {
 			const tipo = await TipoHabitacion.findByPk(idTipoHabitacion);
-			if (!tipo) throw new AppError(ERROR_CODES.VALIDATION_ERROR, 400, "Tipo de habitación no válido.");
+			if (!tipo) throw new AppError(ERROR_CODES.VALIDATION_ERROR, 400, "Tipo de habitaci?n no v?lido.");
 			h.idTipoHabitacion = idTipoHabitacion;
 		}
-		if (numero !== undefined) h.numero = numero;
+
 		if (fueraDeServicio !== undefined) h.fueraDeServicio = Boolean(fueraDeServicio);
 
 		await h.save();
@@ -215,7 +229,7 @@ export const updateHabitacion = async (req, res, next) => {
 export const toggleFueraDeServicio = async (req, res, next) => {
 	try {
 		const h = await Habitacion.findByPk(req.params.id);
-		if (!h) throw notFound("Habitación");
+		if (!h) throw notFound("Habitaci?n");
 
 		h.fueraDeServicio = !h.fueraDeServicio;
 		await h.save();
@@ -240,10 +254,10 @@ export const toggleFueraDeServicio = async (req, res, next) => {
 export const deleteHabitacion = async (req, res, next) => {
 	try {
 		const h = await Habitacion.findByPk(req.params.id);
-		if (!h) throw notFound("Habitación");
+		if (!h) throw notFound("Habitaci?n");
 
 		const reservasCount = await Reserva.count({ where: { idHabitacion: req.params.id } });
-		if (reservasCount > 0) throw entityInUse("la habitación", reservasCount, "reserva");
+		if (reservasCount > 0) throw entityInUse("la habitaci?n", reservasCount, "reserva");
 
 		await h.destroy();
 		res.status(204).end();

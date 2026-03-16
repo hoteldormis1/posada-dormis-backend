@@ -29,14 +29,24 @@ export const createHuesped = async (req, res, next) => {
 		const missing = requiredFields.filter((field) => !req.body[field]);
 		if (missing.length) throw missingFields(missing);
 
-		const existente = await Huesped.findOne({ where: { dni: req.body.dni } });
-		if (existente) {
+		const existenteActivo = await Huesped.findOne({ where: { dni: req.body.dni } });
+		if (existenteActivo) {
 			throw new AppError(
 				ERROR_CODES.DNI_DUPLICADO,
 				409,
-				`Ya existe un huésped con DNI ${req.body.dni}: ${existente.nombre} ${existente.apellido}.`,
-				{ idHuesped: existente.idHuesped, nombre: existente.nombre, apellido: existente.apellido }
+				`Ya existe un huésped con DNI ${req.body.dni}: ${existenteActivo.nombre} ${existenteActivo.apellido}.`,
+				{ idHuesped: existenteActivo.idHuesped, nombre: existenteActivo.nombre, apellido: existenteActivo.apellido }
 			);
+		}
+
+		const existenteEliminado = await Huesped.findOne({
+			where: { dni: req.body.dni },
+			paranoid: false,
+		});
+		if (existenteEliminado?.deletedAt) {
+			await existenteEliminado.restore();
+			await existenteEliminado.update(req.body);
+			return res.status(200).json(existenteEliminado);
 		}
 
 		const nuevo = await Huesped.create(req.body);
