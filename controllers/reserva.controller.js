@@ -408,10 +408,24 @@ export const createReserva = async (req, res, next) => {
 			if (missing.length) {
 				return res.status(400).json({ error: `Faltan datos para crear huésped: ${missing.join(", ")}` });
 			}
-			// Si el DNI ya existe, no silenciar ni reutilizar: informar al admin para que use "huésped existente"
-			let huespedExistente = await Huesped.findOne({ where: { dni: huespedData.dni } });
+			// Si el DNI ya existe como activo, informar al admin para que use "huésped existente"
+			const huespedExistente = await Huesped.findOne({ where: { dni: huespedData.dni } });
 			if (huespedExistente) {
 				throw dniExists(huespedData.dni, huespedExistente.nombre, huespedExistente.apellido, huespedExistente.idHuesped);
+			}
+			// Si el DNI existe pero fue eliminado (soft delete), restaurarlo con los nuevos datos
+			const huespedEliminado = await Huesped.findOne({ where: { dni: huespedData.dni }, paranoid: false });
+			if (huespedEliminado?.deletedAt) {
+				await huespedEliminado.restore();
+				await huespedEliminado.update({
+					nombre: huespedData.nombre,
+					apellido: huespedData.apellido,
+					telefono: huespedData.telefono,
+					origen: huespedData.origen,
+					email: huespedData.email || null,
+					direccion: huespedData.direccion || null,
+				});
+				idHuesped = huespedEliminado.idHuesped;
 			} else {
 				const nuevo = await Huesped.create({
 					dni: huespedData.dni,
