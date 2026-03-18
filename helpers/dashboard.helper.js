@@ -6,8 +6,7 @@ import { sequelize } from '../db.js';
 // Config
 export const GRAN_MAP = { day: 'day', week: 'week', month: 'month', year: 'year' };
 export const ESTADOS_VENTA_IDS = []; // p.ej. [2,3] si contás ventas por estado
-// createdAt existe en todas las tablas desde la migración de timestamps
-const TIMELINE_COLUMN = 'createdAt';
+const TIMELINE_COLUMN = 'fechaDesde';
 
 // ─────────────────────────── Utils de fecha ───────────────────────────
 export function parseDateISO(d) {
