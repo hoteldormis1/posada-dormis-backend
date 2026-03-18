@@ -14,6 +14,7 @@ import {
 	ensureDefaultReservaStates,
 	ensureDefaultRoles,
 	ensureHabitacionSchema,
+	ensureUsuariosTipoAsignado,
 } from "./helpers/ensureDefaults.js";
 import { initWss } from "./ws.js";
 
@@ -55,9 +56,10 @@ const startServer = async () => {
 		throw err;
 	}
 
-	await ensureDefaultRoles();
-	await ensureDefaultReservaStates();
 	await ensureHabitacionSchema();
+	await ensureDefaultRoles();
+	await ensureUsuariosTipoAsignado();
+	await ensureDefaultReservaStates();
 
 	initWss(httpServer);
 

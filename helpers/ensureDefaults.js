@@ -73,6 +73,19 @@ export async function ensureDefaultRoles() {
     }
 }
 
+export async function ensureUsuariosTipoAsignado() {
+    const [admin] = await TipoUsuario.findAll({ where: { nombre: "admin" }, limit: 1 });
+    if (admin) {
+        // Asigna rol "admin" a usuarios que no tengan idTipoUsuario (cuentas pre-migración)
+        await sequelize.query(
+            `UPDATE "Usuario" SET "idTipoUsuario" = :id WHERE "idTipoUsuario" IS NULL`,
+            { replacements: { id: admin.idTipoUsuario } }
+        );
+    }
+    // Los usuarios pre-existentes ya estaban operativos: marcarlos como verificados
+    await sequelize.query(`UPDATE "Usuario" SET "verificado" = TRUE WHERE "verificado" = FALSE`);
+}
+
 export async function ensureDefaultReservaStates() {
     const estados = [
         { nombre: "pendiente", descripcion: "Reserva creada, esperando confirmación/garantía", prioridad: 100, esDefault: true },
@@ -100,8 +113,44 @@ export async function ensureDefaultReservaStates() {
 }
 
 export async function ensureHabitacionSchema() {
-    await sequelize.query(`
-        ALTER TABLE "Habitacion"
-        ADD COLUMN IF NOT EXISTS "fueraDeServicio" BOOLEAN NOT NULL DEFAULT FALSE;
-    `);
+    // Columnas de timestamps presentes en todos los modelos con timestamps+paranoid
+    const addTs = [
+        `ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()`,
+        `ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()`,
+        `ADD COLUMN IF NOT EXISTS "deletedAt" TIMESTAMP WITH TIME ZONE`,
+    ].join(', ');
+
+    await sequelize.query(`ALTER TABLE "TipoUsuario"
+        ADD COLUMN IF NOT EXISTS "descripcion" VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS "permisos"    JSONB,
+        ADD COLUMN IF NOT EXISTS "esSistema"   BOOLEAN NOT NULL DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS "activo"      BOOLEAN NOT NULL DEFAULT TRUE,
+        ADD COLUMN IF NOT EXISTS "prioridad"   INTEGER NOT NULL DEFAULT 100,
+        ${addTs};`);
+
+    await sequelize.query(`ALTER TABLE "Usuario"
+        ADD COLUMN IF NOT EXISTS "verificado"         BOOLEAN NOT NULL DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS "verifyToken"        VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS "verifyTokenExpires" TIMESTAMP WITH TIME ZONE,
+        ADD COLUMN IF NOT EXISTS "resetToken"         VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS "resetTokenExpires"  TIMESTAMP WITH TIME ZONE,
+        ADD COLUMN IF NOT EXISTS "idTipoUsuario"      INTEGER,
+        ${addTs};`);
+
+    await sequelize.query(`ALTER TABLE "Habitacion"
+        ADD COLUMN IF NOT EXISTS "fueraDeServicio" BOOLEAN NOT NULL DEFAULT FALSE,
+        ${addTs};`);
+
+    await sequelize.query(`ALTER TABLE "TipoHabitacion" ${addTs};`);
+
+    await sequelize.query(`ALTER TABLE "EstadoReserva" ${addTs};`);
+
+    await sequelize.query(`ALTER TABLE "Reserva" ${addTs};`);
+
+    await sequelize.query(`ALTER TABLE "Huesped" ${addTs};`);
+
+    await sequelize.query(`ALTER TABLE "HuespedNoDeseado" ${addTs};`);
+
+    await sequelize.query(`ALTER TABLE "Auditoria"
+        ${addTs};`);
 }
