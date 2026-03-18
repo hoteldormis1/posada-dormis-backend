@@ -73,19 +73,6 @@ export async function ensureDefaultRoles() {
     }
 }
 
-export async function ensureUsuariosTipoAsignado() {
-    const [admin] = await TipoUsuario.findAll({ where: { nombre: "admin" }, limit: 1 });
-    if (admin) {
-        // Asigna rol "admin" a usuarios que no tengan idTipoUsuario (cuentas pre-migración)
-        await sequelize.query(
-            `UPDATE "Usuario" SET "idTipoUsuario" = :id WHERE "idTipoUsuario" IS NULL`,
-            { replacements: { id: admin.idTipoUsuario } }
-        );
-    }
-    // Los usuarios pre-existentes ya estaban operativos: marcarlos como verificados
-    await sequelize.query(`UPDATE "Usuario" SET "verificado" = TRUE WHERE "verificado" = FALSE`);
-}
-
 export async function ensureDefaultReservaStates() {
     const estados = [
         { nombre: "pendiente", descripcion: "Reserva creada, esperando confirmación/garantía", prioridad: 100, esDefault: true },
