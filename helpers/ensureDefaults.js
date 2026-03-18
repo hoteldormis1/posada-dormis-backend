@@ -147,7 +147,10 @@ export async function ensureHabitacionSchema() {
 
     await sequelize.query(`ALTER TABLE "Reserva" ${addTs};`);
 
-    await sequelize.query(`ALTER TABLE "Huesped" ${addTs};`);
+    await sequelize.query(`ALTER TABLE "Huesped"
+        ADD COLUMN IF NOT EXISTS "email"     VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS "direccion" VARCHAR(255),
+        ${addTs};`);
 
     await sequelize.query(`ALTER TABLE "HuespedNoDeseado" ${addTs};`);
 
